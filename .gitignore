@@ -1,0 +1,42 @@
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Misc
+compile_commands.json
+doc.cap
+*.spp
+*.blend
+*.hdr
+
+### Folders ###
+.xmake/
+.cache/
+.vscode/
+build/
