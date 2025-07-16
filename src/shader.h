@@ -35,6 +35,6 @@ bool shader_create_from_bytecode(ID3D11Device1 *device, shader_stage_t stage, co
 void shader_destroy(shader_t *shader);
 bool shader_bind(shader_t *shader);
 
-bool shader_pipeline_create(ID3D11Device1 *device, shader_t *shaders, uint8_t shader_count, const D3D11_INPUT_ELEMENT_DESC *input_desc, uint16_t input_count, shader_pipeline_t *out_pipeline);
+bool shader_pipeline_create(ID3D11Device1 *device, shader_t **shaders, uint8_t shader_count, const D3D11_INPUT_ELEMENT_DESC *input_desc, uint16_t input_count, shader_pipeline_t *out_pipeline);
 bool shader_pipeline_bind(ID3D11DeviceContext1 *context, shader_pipeline_t *pipeline);
 void shader_pipeline_destroy(shader_pipeline_t *pipeline);

@@ -3,6 +3,7 @@
 #include "logger.h"
 
 #include <assert.h>
+#include <windows.h>
 
 #define DEFAULT_WIN_CLASS_NAME L"DefaultWinClassName"
 
@@ -103,6 +104,13 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
             CREATESTRUCTW *create_struct = (CREATESTRUCTW *)l_param;
             window_t *win = (window_t *)create_struct->lpCreateParams;
             SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)win);
+            return 0;
+        }
+
+        case WM_GETMINMAXINFO: {
+            MINMAXINFO *mmi = (MINMAXINFO*)l_param;
+            mmi->ptMinTrackSize.x = 500;
+            mmi->ptMinTrackSize.y = 500;
             return 0;
         }
 

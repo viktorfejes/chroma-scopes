@@ -44,6 +44,8 @@ static bool application_initialize(void) {
         return false;
     }
 
+    capture_set_monitor(&renderer.capture, renderer.device, 1);
+
     return true;
 }
 

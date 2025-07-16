@@ -1,14 +1,16 @@
 #pragma once
 
 #include "capture.h"
-#include "texture.h"
 #include "shader.h"
+#include "texture.h"
+#include "ui.h"
 
 #include <stdbool.h>
 
 #include <d3d11_1.h>
 #include <dxgi1_4.h>
 
+struct ui_state;
 struct window;
 
 typedef struct swapchain {
@@ -43,6 +45,13 @@ enum sampler_state {
 
 struct shaders {
     shader_t fs_triangle_vs;
+    shader_t vectorscope_cs;
+    shader_t composite_ps;
+};
+
+struct passes {
+    shader_pipeline_t vectorscope;
+    shader_pipeline_t composite;
 };
 
 typedef struct renderer {
@@ -54,6 +63,10 @@ typedef struct renderer {
 
     capture_t capture;
     texture_t blit_texture;
+    texture_t vectorscope_texture;
+
+    // UI
+    ui_state_t ui_state;
 
     // States
     ID3D11RasterizerState *rasterizer_states[RASTER_STATE_COUNT];
@@ -62,6 +75,7 @@ typedef struct renderer {
 
     // Shaders and pipelines
     struct shaders shaders;
+    struct passes passes;
 } renderer_t;
 
 bool renderer_initialize(struct window *window, renderer_t *out_renderer);

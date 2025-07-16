@@ -1,7 +1,10 @@
 #include "renderer.h"
 
+#include "capture.h"
 #include "logger.h"
 #include "macros.h"
+#include "shader.h"
+#include "ui.h"
 #include "window.h"
 
 #include <assert.h>
@@ -26,6 +29,10 @@ bool renderer_initialize(window_t *window, renderer_t *out_renderer) {
     }
     LOG("D3D11 Device created");
 
+    // TODO: Modify the create swapchain by only passing in a swapchain struct
+    // and then it can do malloc inside the function and this will be cleaned up
+    out_renderer->swapchain.texture = (texture_t *)malloc(sizeof(texture_t));
+    memset(out_renderer->swapchain.texture, 0, sizeof(texture_t));
     if (!create_swapchain(out_renderer->device, window->hwnd, out_renderer->swapchain.texture, &out_renderer->swapchain.swapchain)) {
         LOG("Failed to create D3D11 Swapchain");
         return false;
@@ -67,6 +74,9 @@ bool renderer_initialize(window_t *window, renderer_t *out_renderer) {
         return false;
     }
 
+    // Initialize UI state
+    ui_initialize(&out_renderer->ui_state);
+
     return true;
 }
 
@@ -86,10 +96,79 @@ void renderer_terminate(renderer_t *renderer) {
 
 void renderer_begin_frame(renderer_t *renderer) {
     UNUSED(renderer);
+    // TEMP:
+    renderer->context->lpVtbl->IASetPrimitiveTopology(renderer->context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
 void renderer_draw(renderer_t *renderer) {
     capture_frame(&renderer->capture, (rect_t){0, 0, 500, 500}, renderer->context, &renderer->blit_texture);
+
+    ID3D11DeviceContext1 *context = renderer->context;
+    float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    // Generate Vectorscope
+    {
+        // Bind the shader pipeline
+        shader_pipeline_bind(context, &renderer->passes.vectorscope);
+
+        // Bind the sampler
+        context->lpVtbl->CSSetSamplers(context, 0, 1, &renderer->sampler_states[SAMPLER_LINEAR_CLAMP]);
+
+        // Bind the Capture Texture as SRV
+        context->lpVtbl->CSSetShaderResources(context, 0, 1, &renderer->blit_texture.srv);
+
+        // Clear the UAV
+        context->lpVtbl->ClearUnorderedAccessViewFloat(context, renderer->vectorscope_texture.uav[0], clear_color);
+
+        // Bind the UAV
+        context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &renderer->vectorscope_texture.uav[0], NULL);
+
+        // Calculate dispatch size
+        uint32_t thread_groups[] = {16, 16, 1};
+        uint32_t dispatch_x = (renderer->vectorscope_texture.width + (thread_groups[0] - 1)) / thread_groups[0];
+        uint32_t dispatch_y = (renderer->vectorscope_texture.width + (thread_groups[1] - 1)) / thread_groups[1];
+        uint32_t dispatch_z = thread_groups[2];
+
+        context->lpVtbl->Dispatch(context, dispatch_x, dispatch_y, dispatch_z);
+
+        // Unbind UAV
+        ID3D11UnorderedAccessView *nulluav = NULL;
+        context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
+    }
+
+    {
+        // Binding states
+        context->lpVtbl->RSSetState(context, renderer->rasterizer_states[RASTER_2D_DEFAULT]);
+        context->lpVtbl->OMSetBlendState(context, renderer->blend_states[BLEND_OPAQUE], NULL, 0xFFFFFFFF);
+
+        // Clear and bind the render target (no depth needed)
+        context->lpVtbl->ClearRenderTargetView(context, renderer->swapchain.texture->rtv[0], clear_color);
+        context->lpVtbl->OMSetRenderTargets(context, 1, &renderer->swapchain.texture->rtv[0], NULL);
+
+        // Bind the shader pipeline
+        shader_pipeline_bind(context, &renderer->passes.composite);
+
+        // Bind the sampler
+        context->lpVtbl->PSSetSamplers(context, 0, 1, &renderer->sampler_states[SAMPLER_LINEAR_CLAMP]);
+
+        // Set the viewport
+        D3D11_VIEWPORT viewport = {
+            .Width = (float)renderer->swapchain.texture->width,
+            .Height = (float)renderer->swapchain.texture->height,
+            .MinDepth = 0.0f,
+            .MaxDepth = 1.0f,
+        };
+        context->lpVtbl->RSSetViewports(context, 1, &viewport);
+
+        // Bind the SRV
+        context->lpVtbl->PSSetShaderResources(context, 0, 1, &renderer->vectorscope_texture.srv);
+
+        context->lpVtbl->Draw(context, 3, 0);
+
+        //Unbind SRV
+        ID3D11ShaderResourceView *nullsrv = NULL;
+        context->lpVtbl->PSSetShaderResources(context, 0, 1, &nullsrv);
+    }
 }
 
 void renderer_end_frame(renderer_t *renderer) {
@@ -321,7 +400,6 @@ static bool create_swapchain(ID3D11Device1 *device, HWND hwnd, texture_t *swapch
     dxgi_device->lpVtbl->Release(dxgi_device);
 
     // I could create the RTV for the swapchain here.
-    swapchain_texture = (texture_t *)malloc(sizeof(texture_t));
     if (!texture_create_from_backbuffer(device, *swapchain, swapchain_texture)) {
         LOG("Failed to create swapchain texture from backbuffer");
         return false;
@@ -543,6 +621,26 @@ static bool create_textures(renderer_t *renderer) {
         LOG("Capture blit texture created");
     }
 
+    // Create texture for vectorscope
+    {
+        const texture_desc_t desc = {
+            .width = 1024,
+            .height = 1024,
+            .format = DXGI_FORMAT_R16G16B16A16_FLOAT,
+            .array_size = 1,
+            .bind_flags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+            .mip_levels = 1,
+            .msaa_samples = 1,
+            .generate_srv = true,
+        };
+
+        if (!texture_create(device, &desc, &renderer->vectorscope_texture)) {
+            LOG("Failed to create texture for vectorscope");
+            return false;
+        }
+        LOG("Vectorscope texture created");
+    }
+
     return true;
 }
 
@@ -552,12 +650,63 @@ static bool create_shader_pipelines(renderer_t *renderer) {
     // Create full-screen triangle vertex shader
     {
         if (!shader_create_from_file(
-            device,
-            "assets/shaders/fullscreen_triangle.vs.hlsl",
-            SHADER_STAGE_VS,
-            "main",
-            &renderer->shaders.fs_triangle_vs)) {
+                device,
+                "assets/shaders/fullscreen_triangle.vs.hlsl",
+                SHADER_STAGE_VS,
+                "main",
+                &renderer->shaders.fs_triangle_vs)) {
             LOG("Failed to create full-screen triangle vertex shader");
+            return false;
+        }
+    }
+
+    // Create shader pipeline for vectorscope pass
+    {
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/vectorscope.cs.hlsl",
+                SHADER_STAGE_CS,
+                "main",
+                &renderer->shaders.vectorscope_cs)) {
+            LOG("Failed to create compute shader for Vectorscope Pass");
+            return false;
+        }
+
+        shader_t *shaders[] = {&renderer->shaders.vectorscope_cs};
+        if (!shader_pipeline_create(
+                device,
+                shaders,
+                ARRAYSIZE(shaders),
+                NULL,
+                0,
+                &renderer->passes.vectorscope)) {
+            LOG("Failed to create shader pipeline for Vectorscope Pass");
+            return false;
+        }
+    }
+
+    // Create shader pipeline for composite pass
+    {
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/comp.ps.hlsl",
+                SHADER_STAGE_PS,
+                "main",
+                &renderer->shaders.composite_ps)) {
+            LOG("Failed to create pixel shader for Composite Pass");
+            return false;
+        }
+
+        shader_t *shaders[] = {&renderer->shaders.fs_triangle_vs, &renderer->shaders.composite_ps};
+
+        if (!shader_pipeline_create(
+                device,
+                shaders,
+                ARRAYSIZE(shaders),
+                NULL,
+                0,
+                &renderer->passes.composite)) {
+            LOG("Failed to create shader pipeline for Composite Pass");
             return false;
         }
     }

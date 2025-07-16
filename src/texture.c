@@ -243,6 +243,16 @@ bool texture_create(ID3D11Device1 *device, const texture_desc_t *desc, texture_t
         }
     }
 
+    out_texture->width = desc->width;
+    out_texture->height = desc->height;
+    out_texture->format = desc->format;
+    out_texture->mip_levels = desc->mip_levels;
+    out_texture->array_size = desc->array_size;
+    out_texture->is_cubemap = desc->is_cubemap;
+    out_texture->bind_flags = desc->bind_flags;
+    out_texture->has_srv = desc->generate_srv;
+    out_texture->msaa_samples = desc->msaa_samples;
+    
     return true;
 }
 
@@ -279,6 +289,9 @@ bool texture_create_from_backbuffer(ID3D11Device1 *device, IDXGISwapChain3 *swap
     out_texture->msaa_samples = desc.SampleDesc.Count;
     out_texture->is_cubemap = false; // Backbuffers are never cubemaps
     out_texture->bind_flags = desc.BindFlags;
+
+    // Release the backbuffer
+    backbuffer->lpVtbl->Release(backbuffer);
 
     return true;
 }

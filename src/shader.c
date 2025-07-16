@@ -167,7 +167,7 @@ bool shader_bind(shader_t *shader) {
     return true;
 }
 
-bool shader_pipeline_create(ID3D11Device1 *device, shader_t *shaders, uint8_t shader_count, const D3D11_INPUT_ELEMENT_DESC *input_desc, uint16_t input_count, shader_pipeline_t *out_pipeline) {
+bool shader_pipeline_create(ID3D11Device1 *device, shader_t **shaders, uint8_t shader_count, const D3D11_INPUT_ELEMENT_DESC *input_desc, uint16_t input_count, shader_pipeline_t *out_pipeline) {
     assert(device && "Device cannot be NULL");
     assert(shaders && "Shaders array cannot be NULL");
     assert(out_pipeline && "Output shader pipeline cannot be NULL");
@@ -180,7 +180,7 @@ bool shader_pipeline_create(ID3D11Device1 *device, shader_t *shaders, uint8_t sh
     size_t vs_bytecode_size = 0;
 
     for (uint8_t i = 0; i < shader_count; ++i) {
-        shader_t *s = &shaders[i];
+        shader_t *s = shaders[i];
 
         // Validate shader stage
         if (s->stage >= SHADER_STAGE_COUNT) {

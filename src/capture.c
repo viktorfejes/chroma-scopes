@@ -71,7 +71,7 @@ bool capture_frame(capture_t *capture, rect_t area, ID3D11DeviceContext1 *contex
     }
 
     // Check the output texture's dimensions against the capture area (They should match or be bigger!)
-    if (out_texture->width >= area.width || out_texture->height >= area.height) {
+    if (out_texture->width < area.width || out_texture->height < area.height) {
         LOG("The output texture dimensions do not match the capture region size");
         return false;
     }
