@@ -3,6 +3,7 @@
 #include "capture.h"
 #include "logger.h"
 #include "macros.h"
+#include "math.h"
 #include "shader.h"
 #include "ui.h"
 #include "window.h"
@@ -12,6 +13,16 @@
 
 #include <d3d11_1.h>
 
+struct per_frame_data {
+    float4x4_t projection;
+};
+
+struct per_ui_mesh_data {
+    float2_t position;
+    float2_t size;
+    float4_t color;
+};
+
 static bool create_device(ID3D11Device1 **device, ID3D11DeviceContext1 **context, D3D_FEATURE_LEVEL *feature_level);
 static bool create_swapchain(ID3D11Device1 *device, HWND hwnd, texture_t *swapchain_texture, IDXGISwapChain3 **swapchain);
 static void destroy_swapchain(swapchain_t *swapchain);
@@ -19,9 +30,13 @@ static void destroy_swapchain(swapchain_t *swapchain);
 static bool create_pipeline_states(renderer_t *renderer);
 static bool create_textures(renderer_t *renderer);
 static bool create_shader_pipelines(renderer_t *renderer);
+static bool create_constant_buffers(renderer_t *renderer);
 
 bool renderer_initialize(window_t *window, renderer_t *out_renderer) {
     assert(out_renderer && "Renderer pointer MUST NOT be NULL");
+
+    // Store a pointer to the window for convenience
+    out_renderer->window = window;
 
     if (!create_device(&out_renderer->device, &out_renderer->context, &out_renderer->feature_level)) {
         LOG("Failed to create D3D11 device");
@@ -74,8 +89,11 @@ bool renderer_initialize(window_t *window, renderer_t *out_renderer) {
         return false;
     }
 
-    // Initialize UI state
-    ui_initialize(&out_renderer->ui_state);
+    // Create buffers
+    if (!create_constant_buffers(out_renderer)) {
+        LOG("Failed to create necessary buffers");
+        return false;
+    }
 
     return true;
 }
@@ -95,12 +113,23 @@ void renderer_terminate(renderer_t *renderer) {
 }
 
 void renderer_begin_frame(renderer_t *renderer) {
-    UNUSED(renderer);
+    ID3D11DeviceContext1 *context = renderer->context;
+
+    // FIXME: I don't think the projection will change ever, so we might only need to
+    // update it when resizing but otherwise this can be static.
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    context->lpVtbl->Map(context, (ID3D11Resource *)renderer->per_frame_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    struct per_frame_data *per_frame_buffer = mapped.pData;
+    per_frame_buffer->projection = mat_orthographic_offcenter_lh(0.0f, (float)renderer->window->width, (float)renderer->window->height, 0.0f, 0.0f, 1.0f);
+    context->lpVtbl->Unmap(context, (ID3D11Resource *)renderer->per_frame_buffer, 0);
+
+    context->lpVtbl->VSSetConstantBuffers(context, 0, 1, &renderer->per_frame_buffer);
+
     // TEMP:
     renderer->context->lpVtbl->IASetPrimitiveTopology(renderer->context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
-void renderer_draw(renderer_t *renderer) {
+void renderer_draw_scopes(renderer_t *renderer) {
     capture_frame(&renderer->capture, (rect_t){0, 0, 500, 500}, renderer->context, &renderer->blit_texture);
 
     ID3D11DeviceContext1 *context = renderer->context;
@@ -135,7 +164,70 @@ void renderer_draw(renderer_t *renderer) {
         ID3D11UnorderedAccessView *nulluav = NULL;
         context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
     }
+}
 
+void renderer_draw_ui(renderer_t *renderer, const struct ui_draw_list *draw_list) {
+    ID3D11DeviceContext1 *context = renderer->context;
+    float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    // Binding states
+    context->lpVtbl->RSSetState(context, renderer->rasterizer_states[RASTER_2D_WIREFRAME]);
+    context->lpVtbl->OMSetBlendState(context, renderer->blend_states[BLEND_ALPHA], NULL, 0xFFFFFFFF);
+
+    // Clear and bind the render target (no depth needed)
+    context->lpVtbl->ClearRenderTargetView(context, renderer->ui_rt.rtv[0], clear_color);
+    context->lpVtbl->OMSetRenderTargets(context, 1, &renderer->ui_rt.rtv[0], NULL);
+
+    // Bind the shader pipeline
+    shader_pipeline_bind(context, &renderer->passes.ui);
+
+    // Bind the sampler
+    context->lpVtbl->PSSetSamplers(context, 0, 1, &renderer->sampler_states[SAMPLER_LINEAR_CLAMP]);
+
+    // Set the viewport
+    D3D11_VIEWPORT viewport = {
+        .Width = (float)renderer->ui_rt.width,
+        .Height = (float)renderer->ui_rt.height,
+        .MinDepth = 0.0f,
+        .MaxDepth = 1.0f,
+    };
+    context->lpVtbl->RSSetViewports(context, 1, &viewport);
+
+    uint32_t count = draw_list->count;
+    for (uint32_t i = 0; i < count; ++i) {
+        const ui_draw_command_t *command = &draw_list->commands[i];
+
+        // Bind the per object data
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        context->lpVtbl->Map(context, (ID3D11Resource *)renderer->per_ui_mesh_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+
+        struct per_ui_mesh_data *per_mesh_buffer = mapped.pData;
+        per_mesh_buffer->position = command->position;
+        per_mesh_buffer->size = command->size;
+        per_mesh_buffer->color = command->background_color;
+
+        context->lpVtbl->Unmap(context, (ID3D11Resource *)renderer->per_ui_mesh_buffer, 0);
+
+        context->lpVtbl->VSSetConstantBuffers(context, 1, 1, &renderer->per_ui_mesh_buffer);
+        context->lpVtbl->PSSetConstantBuffers(context, 1, 1, &renderer->per_ui_mesh_buffer);
+
+        // Set texture if any is present
+        if (command->background_image) {
+            context->lpVtbl->PSSetShaderResources(context, 0, 1, &command->background_image->srv);
+        } else {
+            context->lpVtbl->PSSetShaderResources(context, 0, 1, &renderer->default_white_px.srv);
+        }
+
+        // Draw the UI mesh
+        context->lpVtbl->Draw(context, 6, 0);
+    }
+}
+
+void renderer_draw_composite(renderer_t *renderer) {
+    ID3D11DeviceContext1 *context = renderer->context;
+    float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    // Output to Swapchain
     {
         // Binding states
         context->lpVtbl->RSSetState(context, renderer->rasterizer_states[RASTER_2D_DEFAULT]);
@@ -160,12 +252,16 @@ void renderer_draw(renderer_t *renderer) {
         };
         context->lpVtbl->RSSetViewports(context, 1, &viewport);
 
-        // Bind the SRV
-        context->lpVtbl->PSSetShaderResources(context, 0, 1, &renderer->vectorscope_texture.srv);
+        // Bind the SRVs
+        ID3D11ShaderResourceView *srvs[] = {
+            renderer->vectorscope_texture.srv,
+            renderer->ui_rt.srv,
+        };
+        context->lpVtbl->PSSetShaderResources(context, 0, ARRAYSIZE(srvs), srvs);
 
         context->lpVtbl->Draw(context, 3, 0);
 
-        //Unbind SRV
+        // Unbind SRV
         ID3D11ShaderResourceView *nullsrv = NULL;
         context->lpVtbl->PSSetShaderResources(context, 0, 1, &nullsrv);
     }
@@ -459,7 +555,7 @@ static bool create_pipeline_states(renderer_t *renderer) {
         {
             D3D11_RASTERIZER_DESC desc = base;
             desc.FillMode = D3D11_FILL_WIREFRAME;
-            device->lpVtbl->CreateRasterizerState(device, &desc, &renderer->rasterizer_states[RASTER_2D_SCISSOR]);
+            device->lpVtbl->CreateRasterizerState(device, &desc, &renderer->rasterizer_states[RASTER_2D_WIREFRAME]);
         }
     }
 
@@ -641,6 +737,37 @@ static bool create_textures(renderer_t *renderer) {
         LOG("Vectorscope texture created");
     }
 
+    // Create texture for UI pass
+    {
+        const texture_desc_t desc = {
+            .width = renderer->window->width,
+            .height = renderer->window->height,
+            .format = DXGI_FORMAT_R8G8B8A8_UNORM,
+            .array_size = 1,
+            .bind_flags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
+            .mip_levels = 1,
+            .msaa_samples = 1,
+            .generate_srv = true,
+        };
+
+        if (!texture_create(device, &desc, &renderer->ui_rt)) {
+            LOG("Failed to create texture for UI render target");
+            return false;
+        }
+        LOG("UI render target texture created");
+    }
+
+    // Create 1px white texture
+    {
+        uint8_t data[4] = {255, 255, 255, 255};
+
+        if (!texture_create_from_data(device, data, 1, 1, &renderer->default_white_px)) {
+            LOG("Failed to create default 1px white texture");
+            return false;
+        }
+        LOG("1px white texture created");
+    }
+
     return true;
 }
 
@@ -707,6 +834,80 @@ static bool create_shader_pipelines(renderer_t *renderer) {
                 0,
                 &renderer->passes.composite)) {
             LOG("Failed to create shader pipeline for Composite Pass");
+            return false;
+        }
+    }
+
+    // Create shader pipeline for UI pass
+    {
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/unit_quad.vs.hlsl",
+                SHADER_STAGE_VS,
+                "main",
+                &renderer->shaders.unit_quad_vs)) {
+            LOG("Failed to create unit quad vertex shader");
+            return false;
+        }
+
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/ui.ps.hlsl",
+                SHADER_STAGE_PS,
+                "main",
+                &renderer->shaders.ui_ps)) {
+            LOG("Failed to create pixel shader for UI Pass");
+            return false;
+        }
+
+        shader_t *shaders[] = {&renderer->shaders.unit_quad_vs, &renderer->shaders.ui_ps};
+
+        if (!shader_pipeline_create(
+                device,
+                shaders,
+                ARRAYSIZE(shaders),
+                NULL,
+                0,
+                &renderer->passes.ui)) {
+            LOG("Failed to create shader pipeline for UI Pass");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool create_constant_buffers(renderer_t *renderer) {
+    ID3D11Device1 *device = renderer->device;
+
+    // Create Constant Buffer for Per Frame Data
+    {
+        D3D11_BUFFER_DESC desc = {
+            .Usage = D3D11_USAGE_DYNAMIC,
+            .ByteWidth = sizeof(struct per_frame_data),
+            .BindFlags = D3D11_BIND_CONSTANT_BUFFER,
+            .CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+        };
+
+        HRESULT hr = device->lpVtbl->CreateBuffer(device, &desc, NULL, &renderer->per_frame_buffer);
+        if (FAILED(hr)) {
+            LOG("Failed to create constant buffer for Per Frame Data");
+            return false;
+        }
+    }
+
+    // Create Constant Buffer for Per UI Mesh Data
+    {
+        D3D11_BUFFER_DESC desc = {
+            .Usage = D3D11_USAGE_DYNAMIC,
+            .ByteWidth = sizeof(struct per_ui_mesh_data),
+            .BindFlags = D3D11_BIND_CONSTANT_BUFFER,
+            .CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+        };
+
+        HRESULT hr = device->lpVtbl->CreateBuffer(device, &desc, NULL, &renderer->per_ui_mesh_buffer);
+        if (FAILED(hr)) {
+            LOG("Failed to create constant buffer for Per UI Mesh Data");
             return false;
         }
     }

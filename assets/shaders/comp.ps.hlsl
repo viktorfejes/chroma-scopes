@@ -1,9 +1,10 @@
-Texture2D tex : register(t0);
+Texture2D tex     : register(t0);
+Texture2D ui      : register(t1);
 SamplerState samp : register(s0);
 
 struct PSInput {
     float4 pos : SV_POSITION;
-    float2 uv : TEXCOORD0;
+    float2 uv  : TEXCOORD0;
 };
 
 float3 LinearToSRGB_Polynomial(float3 color) {
@@ -28,5 +29,7 @@ float3 ACESFilm(float3 x) {
 }
 
 float4 main(PSInput input) : SV_TARGET {
-    return float4(LinearToSRGB_Polynomial(ACESFilm(tex.Sample(samp, input.uv).rgb)), 1.0);
+    float3 scope = LinearToSRGB_Polynomial(ACESFilm(tex.Sample(samp, input.uv).rgb));
+    float3 ui_tex = ui.Sample(samp, input.uv).rgb;
+    return float4(ui_tex, 1.0);
 }

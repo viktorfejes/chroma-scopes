@@ -12,9 +12,22 @@ typedef struct float4 {
     float x, y, z, w;
 } float4_t;
 
-// Column-major order for D3D11
-typedef struct mat4 {
+// Column-major order
+typedef struct float4x4 {
     float m[16];
-} mat4_t;
+} float4x4_t;
 
-mat4_t mat4_ortho(float left, float right, float top, float bottom, float near_z, float far_z);
+typedef struct rect {
+    float x, y;
+    float width, height;
+} rect_t;
+
+#define M(mat, row, col) ((mat).m[(col) * 4 + (row)])
+
+/* @brief Automatically centered, optimized orthographic matrix projection. Left-handed */
+float4x4_t mat_orthographic_lh(float view_width, float view_height, float near_z, float far_z);
+/* @brief Generic offcenter, optimized orthographic matrix projection. Left-handed*/
+float4x4_t mat_orthographic_offcenter_lh(float left, float right, float bottom, float top, float near_z, float far_z);
+
+float2_t rect_to_position(rect_t rect);
+float2_t rect_to_size(rect_t rect);

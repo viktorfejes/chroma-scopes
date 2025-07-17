@@ -2,10 +2,12 @@
 
 #include "logger.h"
 #include "renderer.h"
+#include "ui.h"
 #include "window.h"
 
 static renderer_t renderer;
 static window_t window;
+static ui_state_t ui;
 
 static bool application_initialize(void);
 static void application_terminate(void);
@@ -44,6 +46,43 @@ static bool application_initialize(void) {
         return false;
     }
 
+    // Initialize the UI system
+    if (!ui_initialize(&ui, window.width, window.height)) {
+        LOG("Failed to initialize UI system");
+        return false;
+    }
+
+    // TEST: Insert a new element
+    ui_element_t el = ui_create_element();
+    el.type = UI_ELEMENT_TYPE_FLEX_ROW;
+    el.desired_width = UI_VALUE(100, UI_UNIT_PERCENT);
+    el.desired_height = UI_VALUE(100, UI_UNIT_PERCENT);
+    el.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f};
+    // el.background_image = &renderer.vectorscope_texture;
+    el.gap = (ui_gap_t){UI_VALUE(5, UI_UNIT_PIXEL), UI_VALUE(5, UI_UNIT_PIXEL)};
+    el.padding = (ui_spacing_t){
+        UI_VALUE(10, UI_UNIT_PIXEL),
+        UI_VALUE(10, UI_UNIT_PIXEL),
+        UI_VALUE(10, UI_UNIT_PIXEL),
+        UI_VALUE(10, UI_UNIT_PIXEL),
+    };
+    uint16_t body = ui_insert_element(&ui, &el, 0);
+
+    el.type = UI_ELEMENT_TYPE_BLOCK;
+    el.desired_width = UI_VALUE(100, UI_UNIT_PIXEL);
+    el.desired_height = UI_VALUE(100, UI_UNIT_PERCENT);
+    el.background_color = (float4_t){1.0f, 0.0f, 1.0f, 1.0f};
+    ui_insert_element(&ui, &el, body);
+
+    el.type = UI_ELEMENT_TYPE_BLOCK;
+    el.desired_width = UI_VALUE(100, UI_UNIT_PIXEL);
+    el.desired_height = UI_VALUE(100, UI_UNIT_PERCENT);
+    el.background_color = (float4_t){0.0f, 1.0f, 0.0f, 1.0f};
+    ui_insert_element(&ui, &el, body);
+
+    ui_layout(&ui, &ui.elements[0], (ui_constraints_t){0, 0, window.width, window.height}, (float2_t){0.0f, 0.0f});
+    ui_draw(&ui, &ui.elements[0]);
+
     capture_set_monitor(&renderer.capture, renderer.device, 1);
 
     return true;
@@ -57,7 +96,6 @@ static void application_terminate(void) {
 }
 
 static void application_update(void) {
-
 }
 
 static bool application_run(void) {
@@ -69,7 +107,11 @@ static bool application_run(void) {
         application_update();
 
         renderer_begin_frame(&renderer);
-        renderer_draw(&renderer);
+        renderer_draw_scopes(&renderer);
+
+        renderer_draw_ui(&renderer, &ui.draw_list);
+
+        renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);
     }
 

@@ -252,7 +252,7 @@ bool texture_create(ID3D11Device1 *device, const texture_desc_t *desc, texture_t
     out_texture->bind_flags = desc->bind_flags;
     out_texture->has_srv = desc->generate_srv;
     out_texture->msaa_samples = desc->msaa_samples;
-    
+
     return true;
 }
 
@@ -292,6 +292,33 @@ bool texture_create_from_backbuffer(ID3D11Device1 *device, IDXGISwapChain3 *swap
 
     // Release the backbuffer
     backbuffer->lpVtbl->Release(backbuffer);
+
+    return true;
+}
+
+bool texture_create_from_data(ID3D11Device1 *device, uint8_t *data, uint16_t width, uint16_t height, texture_t *out_texture) {
+    assert(out_texture && "Output texture cannot be NULL");
+    assert(data);
+
+    // Create texture with data on GPU
+    const texture_desc_t desc = {
+        .width = width,
+        .height = height,
+        .format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .bind_flags = D3D11_BIND_SHADER_RESOURCE,
+        .data = data,
+        .row_pitch = 4 * width,
+        .array_size = 1,
+        .mip_levels = 1,
+        .msaa_samples = 1,
+        .generate_srv = true,
+        .is_cubemap = false,
+    };
+
+    if (!texture_create(device, &desc, out_texture)) {
+        LOG("Couldn't create texture on GPU");
+        return false;
+    }
 
     return true;
 }

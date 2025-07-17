@@ -1,5 +1,7 @@
 #pragma once
 
+#include "math.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -9,11 +11,6 @@
 #define CS_MAX_MONITORS 3
 
 struct texture;
-
-typedef struct rect {
-    int32_t x, y;
-    int32_t width, height;
-} rect_t;
 
 typedef struct monitor_info {
     uint32_t id;

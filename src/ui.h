@@ -1,7 +1,10 @@
 #pragma once
 
+#include "math.h"
 #include <stdbool.h>
 #include <stdint.h>
+
+struct texture;
 
 typedef enum ui_element_type {
     UI_ELEMENT_TYPE_INVALID = 0,
@@ -34,15 +37,6 @@ typedef struct ui_gap {
     ui_value_t y;
 } ui_gap_t;
 
-typedef struct ui_rect {
-    int32_t x, y;
-    uint32_t width, height;
-} ui_rect_t;
-
-typedef struct ui_point {
-    int32_t x, y;
-} ui_point_t;
-
 typedef struct ui_constraints {
     uint16_t min_width;
     uint16_t min_height;
@@ -69,21 +63,40 @@ typedef struct ui_element {
     ui_gap_t gap;
 
     /* Decorative styling (most likely temporary for now) */
-    uint32_t background_color;
+    float4_t background_color;
+    struct texture *background_image;
 
     /* Stores the computed position and size of the element. */
-    ui_rect_t computed_rect;
+    rect_t computed_rect;
 } ui_element_t;
 
+#define UI_VALUE(v, u) \
+    (ui_value_t) { (v), (u) }
+
 #define UI_MAX_ELEMENTS 128
+#define UI_ROOT_ID 0
+
+typedef struct ui_draw_command {
+    float2_t position;
+    float2_t size;
+    float4_t background_color;
+    struct texture *background_image;
+} ui_draw_command_t;
+
+typedef struct ui_draw_list {
+    ui_draw_command_t commands[UI_MAX_ELEMENTS];
+    uint32_t count;
+} ui_draw_list_t;
 
 typedef struct ui_state {
     ui_element_t elements[UI_MAX_ELEMENTS];
+    ui_draw_list_t draw_list;
+    struct texture *default_background_texture;
 } ui_state_t;
 
-bool ui_initialize(ui_state_t *state);
+bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height);
 ui_element_t ui_create_element(void);
 uint16_t ui_insert_element(ui_state_t *state, ui_element_t *element, uint16_t parent_id);
 void ui_remove_element(ui_state_t *state, uint16_t id);
-void ui_layout(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints, ui_point_t cursor);
+void ui_layout(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints, float2_t cursor);
 void ui_draw(ui_state_t *state, ui_element_t *root);

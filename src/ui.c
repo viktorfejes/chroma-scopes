@@ -2,6 +2,7 @@
 
 #include "logger.h"
 #include "macros.h"
+
 #include <assert.h>
 #include <string.h>
 
@@ -12,7 +13,7 @@ static void layout_flex_row_children(ui_state_t *state, ui_element_t *element, u
 static void layout_flex_col_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
 static int32_t resolve_unit(ui_value_t value, int32_t max);
 
-bool ui_initialize(ui_state_t *state) {
+bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height) {
     assert(state && "UI state must be a valid pointer");
 
     // For now just invalidate all elements by setting their id's to invalid
@@ -25,7 +26,17 @@ bool ui_initialize(ui_state_t *state) {
         el->next_sibling_id = -1;
     }
 
-    // TODO: Add ROOT
+    // Make sure draw list count is 0
+    state->draw_list.count = 0;
+
+    // Add ROOT by default (the size of window)
+    ui_element_t *root = &state->elements[UI_ROOT_ID];
+    root->id = UI_ROOT_ID;
+    root->type = UI_ELEMENT_TYPE_BLOCK;
+    root->desired_width = UI_VALUE(root_width, UI_UNIT_PIXEL);
+    root->desired_height = UI_VALUE(root_height, UI_UNIT_PIXEL);
+    root->computed_rect.width = root_width;
+    root->computed_rect.height = root_height;
 
     return true;
 }
@@ -37,6 +48,7 @@ ui_element_t ui_create_element(void) {
         .first_child_id = -1,
         .next_sibling_id = -1,
         .type = UI_ELEMENT_TYPE_BLOCK,
+        .background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f},
     };
 
     return default_element;
@@ -64,7 +76,11 @@ uint16_t ui_insert_element(ui_state_t *state, ui_element_t *element, uint16_t pa
     }
 
     // Copy the element into the slot
+    // FIXME: This save-delete-replace is a bit silly for the id
+    uint16_t id = el->id;
     *el = *element;
+    el->id = id;
+    el->parent_id = parent_id;
 
     // Set up appropriate relationship
     ui_element_t *parent = &state->elements[parent_id];
@@ -118,7 +134,7 @@ void ui_remove_element(ui_state_t *state, uint16_t id) {
     }
 }
 
-void ui_layout(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints, ui_point_t cursor) {
+void ui_layout(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints, float2_t cursor) {
     assert(state && "UI state must be a valid pointer");
     assert(element && "UI element must be a valid pointer");
 
@@ -192,8 +208,14 @@ void ui_draw(ui_state_t *state, ui_element_t *root) {
 }
 
 static void draw_element(ui_state_t *state, ui_element_t *root) {
-    UNUSED(state);
-    UNUSED(root);
+    ui_draw_command_t *command = &state->draw_list.commands[state->draw_list.count];
+
+    command->position = rect_to_position(root->computed_rect);
+    command->size = rect_to_size(root->computed_rect);
+    command->background_color = root->background_color;
+    command->background_image = root->background_image;
+
+    state->draw_list.count++;
 }
 
 static void layout_block_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints) {
@@ -201,7 +223,7 @@ static void layout_block_children(ui_state_t *state, ui_element_t *element, ui_c
     int32_t parent_padding_left = resolve_unit(element->padding.left, element->computed_rect.width);
 
     // Initialize local cursor using parent's padding
-    ui_point_t cursor = {
+    float2_t cursor = {
         .x = element->computed_rect.x + parent_padding_left,
         .y = element->computed_rect.y + parent_padding_top,
     };
@@ -235,7 +257,7 @@ static void layout_aligned_children(ui_state_t *state, ui_element_t *element, ui
     ui_element_t *child = &state->elements[child_idx];
 
     // NOTE: Passing in dummy cursor as we will overwrite it later
-    ui_layout(state, child, constraints, (ui_point_t){0, 0});
+    ui_layout(state, child, constraints, (float2_t){0, 0});
 
     // Resolve margins
     int32_t mt = resolve_unit(element->margin.top, child->computed_rect.height);
@@ -256,13 +278,13 @@ static void layout_flex_row_children(ui_state_t *state, ui_element_t *element, u
     int32_t parent_padding_top = resolve_unit(element->padding.top, element->computed_rect.height);
     int32_t parent_padding_left = resolve_unit(element->padding.left, element->computed_rect.width);
 
-    ui_point_t gap = {
+    float2_t gap = {
         .x = resolve_unit(element->gap.x, element->computed_rect.width),
         .y = resolve_unit(element->gap.y, element->computed_rect.height),
     };
 
     // Initialize local cursor using parent's padding
-    ui_point_t cursor = {
+    float2_t cursor = {
         .x = element->computed_rect.x + parent_padding_left,
         .y = element->computed_rect.y + parent_padding_top,
     };
@@ -292,7 +314,7 @@ static void layout_flex_row_children(ui_state_t *state, ui_element_t *element, u
     int32_t parent_center_y = constraints.max_height / 2;
 
     for (int i = 0; i < children_info_count; ++i) {
-        ui_element_t *child = &state->elements[children_info[child_idx].idx];
+        ui_element_t *child = &state->elements[children_info[i].idx];
 
         ui_constraints_t c = {
             .min_width = available_width / children_info_count,
@@ -302,13 +324,13 @@ static void layout_flex_row_children(ui_state_t *state, ui_element_t *element, u
         };
 
         // Measure the size
-        ui_layout(state, child, c, (ui_point_t){0, 0});
+        ui_layout(state, child, c, (float2_t){0, 0});
 
         // Correct the layout if needed based on the alignment
         child->computed_rect.y += parent_center_y - child->computed_rect.height / 2;
 
         // We call layout again to recalculate with new position
-        ui_layout(state, child, c, (ui_point_t){cursor.x, child->computed_rect.y});
+        ui_layout(state, child, c, (float2_t){cursor.x, child->computed_rect.y});
 
         cursor.x += child->computed_rect.width + gap.x;
     }

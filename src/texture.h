@@ -48,5 +48,6 @@ typedef struct texture {
 bool texture_load(ID3D11Device1 *device, const char *filename, texture_format_t format, texture_t *out_texture);
 bool texture_create(ID3D11Device1 *device, const texture_desc_t *desc, texture_t *out_texture);
 bool texture_create_from_backbuffer(ID3D11Device1 *device, IDXGISwapChain3 *swapchain, texture_t *out_texture);
+bool texture_create_from_data(ID3D11Device1 *device, uint8_t *data, uint16_t width, uint16_t height, texture_t *out_texture);
 void texture_destroy(texture_t *texture);
 bool texture_resize(ID3D11Device1 *device, texture_t *texture, uint16_t w, uint16_t h);

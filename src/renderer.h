@@ -3,14 +3,13 @@
 #include "capture.h"
 #include "shader.h"
 #include "texture.h"
-#include "ui.h"
 
 #include <stdbool.h>
 
 #include <d3d11_1.h>
 #include <dxgi1_4.h>
 
-struct ui_state;
+struct ui_draw_list;
 struct window;
 
 typedef struct swapchain {
@@ -45,13 +44,16 @@ enum sampler_state {
 
 struct shaders {
     shader_t fs_triangle_vs;
+    shader_t unit_quad_vs;
     shader_t vectorscope_cs;
     shader_t composite_ps;
+    shader_t ui_ps;
 };
 
 struct passes {
     shader_pipeline_t vectorscope;
     shader_pipeline_t composite;
+    shader_pipeline_t ui;
 };
 
 typedef struct renderer {
@@ -64,9 +66,8 @@ typedef struct renderer {
     capture_t capture;
     texture_t blit_texture;
     texture_t vectorscope_texture;
-
-    // UI
-    ui_state_t ui_state;
+    texture_t ui_rt;
+    texture_t default_white_px;
 
     // States
     ID3D11RasterizerState *rasterizer_states[RASTER_STATE_COUNT];
@@ -76,12 +77,20 @@ typedef struct renderer {
     // Shaders and pipelines
     struct shaders shaders;
     struct passes passes;
+
+    // Buffers
+    ID3D11Buffer *per_frame_buffer;
+    ID3D11Buffer *per_ui_mesh_buffer;
+
+    struct window *window;
 } renderer_t;
 
 bool renderer_initialize(struct window *window, renderer_t *out_renderer);
 void renderer_terminate(renderer_t *renderer);
 void renderer_begin_frame(renderer_t *renderer);
-void renderer_draw(renderer_t *renderer);
+void renderer_draw_scopes(renderer_t *renderer);
+void renderer_draw_ui(renderer_t *renderer, const struct ui_draw_list *draw_list);
+void renderer_draw_composite(renderer_t *renderer);
 void renderer_end_frame(renderer_t *renderer);
 
 void check_d3d11_debug_messages(ID3D11Device *device);
