@@ -7,21 +7,34 @@
 struct texture;
 
 typedef enum ui_element_type {
-    UI_ELEMENT_TYPE_INVALID = 0,
-    UI_ELEMENT_TYPE_BLOCK,
+    UI_ELEMENT_TYPE_BLOCK = 0,
+    UI_ELEMENT_TYPE_FLEX,
     UI_ELEMENT_TYPE_ALIGNED,
-    UI_ELEMENT_TYPE_FLEX_ROW,
-    UI_ELEMENT_TYPE_FLEX_COL,
 } ui_element_type_t;
 
 typedef enum ui_unit {
-    UI_UNIT_PIXEL = 0,
+    UI_UNIT_AUTO = 0,
+    UI_UNIT_PIXEL,
     UI_UNIT_PERCENT,
-    UI_UNIT_FLEX,
 } ui_unit_t;
 
+typedef enum ui_flex_direction {
+    UI_FLEX_DIRECTION_ROW = 0,
+    UI_FLEX_DIRECTION_COL
+} ui_flex_direction_t;
+
+typedef enum ui_flex_align {
+    UI_FLEX_ALIGN_START = 0,
+    UI_FLEX_ALIGN_END,
+    UI_FLEX_ALIGN_STRETCH,
+    UI_FLEX_ALIGN_CENTER,
+    UI_FLEX_ALIGN_SPACE_BETWEEN,
+    UI_FLEX_ALIGN_SPACE_EVENLY,
+    UI_FLEX_ALIGN_SPACE_AROUND
+} ui_flex_align_t;
+
 typedef struct ui_value {
-    int32_t value;
+    float value;
     ui_unit_t unit;
 } ui_value_t;
 
@@ -37,12 +50,15 @@ typedef struct ui_gap {
     ui_value_t y;
 } ui_gap_t;
 
-typedef struct ui_constraints {
-    uint16_t min_width;
-    uint16_t min_height;
-    uint16_t max_width;
-    uint16_t max_height;
-} ui_constraints_t;
+typedef struct ui_styling {
+    float4_t background_color;
+    struct texture *background_image;
+} ui_styling_t;
+
+typedef struct ui_computed {
+    rect_t layout;
+    rect_t content;
+} ui_computed_t;
 
 typedef struct ui_element {
     uint16_t id;
@@ -55,19 +71,26 @@ typedef struct ui_element {
     /* Type of the UI element. Equivalent to CSS `display` */
     ui_element_type_t type;
 
-    /* Sizing and spacing */
-    ui_value_t desired_width;
-    ui_value_t desired_height;
-    ui_spacing_t margin;
-    ui_spacing_t padding;
+    /* Attributes when type is flex */
+    ui_flex_direction_t flex_direction;
+    ui_flex_align_t flex_main_axis_alignment;
+    ui_flex_align_t flex_cross_axis_alignment;
+    uint8_t flex_grow;
+    uint8_t flex_shrink;
     ui_gap_t gap;
 
-    /* Decorative styling (most likely temporary for now) */
-    float4_t background_color;
-    struct texture *background_image;
+    /* Sizing and spacing */
+    ui_value_t width;
+    ui_value_t height;
+    ui_spacing_t margin;
+    ui_spacing_t padding;
+
+    /* Decorative styling */
+    ui_styling_t base_style;
+    ui_styling_t hover_style;
 
     /* Stores the computed position and size of the element. */
-    rect_t computed_rect;
+    ui_computed_t computed;
 } ui_element_t;
 
 #define UI_VALUE(v, u) \
@@ -98,5 +121,6 @@ bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height)
 ui_element_t ui_create_element(void);
 uint16_t ui_insert_element(ui_state_t *state, ui_element_t *element, uint16_t parent_id);
 void ui_remove_element(ui_state_t *state, uint16_t id);
-void ui_layout(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints, float2_t cursor);
+void ui_layout_measure(ui_state_t *state, ui_element_t *element, uint16_t min_width, uint16_t max_width, uint16_t min_height, uint16_t max_height);
+void ui_layout_position(ui_state_t *state, ui_element_t *element, float origin_x, float origin_y);
 void ui_draw(ui_state_t *state, ui_element_t *root);

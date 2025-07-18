@@ -1,89 +1,112 @@
-<canvas id="uiCanvas" width="800" height="600" style="border:1px solid #ccc;"></canvas>
-<script>
-    class Node {
-        constructor({
-            name,
-            display = 'block',
-            width = 0,
-            height = 0,
-            flexGrow = 0,
-            flexDirection = 'column',
-            mainAxisAlignment = 'start', // start, center, end, spaceBetween, spaceAround, spaceEvenly
-            crossAxisAlignment = 'stretch', // start, center, end, stretch
-            padding = 0,
-            margin = 0,
-            gap = 0,
-            children = []
-        }) {
-            this.name = name;
-            this.display = display;
-            this.width = width;
-            this.height = height;
-            this.flexGrow = flexGrow;
-            this.flexDirection = flexDirection;
-            this.mainAxisAlignment = mainAxisAlignment;
-            this.crossAxisAlignment = crossAxisAlignment;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Layout Engine</title>
+</head>
+<body>
+    <canvas id="uiCanvas" width="800" height="600" style="border:1px solid #ccc;"></canvas>
+    <script>
+        class Node {
+            constructor({
+                name,
+                display = 'block',
+                width = 0,
+                height = 0,
+                flexGrow = 0,
+                flexDirection = 'column',
+                mainAxisAlignment = 'start',
+                crossAxisAlignment = 'stretch',
+                padding = 0,
+                margin = 0,
+                gap = 0,
+                children = []
+            }) {
+                this.name = name;
+                this.display = display;
+                this.width = width;
+                this.height = height;
+                this.flexGrow = flexGrow;
+                this.flexDirection = flexDirection;
+                this.mainAxisAlignment = mainAxisAlignment;
+                this.crossAxisAlignment = crossAxisAlignment;
 
-            // Handle padding/margin as numbers or objects
-            this.padding = this.parseSpacing(padding);
-            this.margin = this.parseSpacing(margin);
-            this.gap = gap;
+                this.padding = this.parseSpacing(padding);
+                this.margin = this.parseSpacing(margin);
+                this.gap = gap;
 
-            this.children = children;
-            this.layout = {x: 0, y: 0, w: 0, h: 0};
-            this.contentArea = {x: 0, y: 0, w: 0, h: 0}; // Area inside padding
+                this.children = children;
+                this.layout = {x: 0, y: 0, w: 0, h: 0};
+                this.contentArea = {x: 0, y: 0, w: 0, h: 0};
+            }
+
+            parseSpacing(spacing) {
+                if (typeof spacing === 'number') {
+                    return {top: spacing, right: spacing, bottom: spacing, left: spacing};
+                }
+                return {
+                    top: spacing.top || 0,
+                    right: spacing.right || 0,
+                    bottom: spacing.bottom || 0,
+                    left: spacing.left || 0
+                };
+            }
+
+            get paddingHorizontal() {return this.padding.left + this.padding.right;}
+            get paddingVertical() {return this.padding.top + this.padding.bottom;}
+            get marginHorizontal() {return this.margin.left + this.margin.right;}
+            get marginVertical() {return this.margin.top + this.margin.bottom;}
         }
 
-        parseSpacing(spacing) {
-            if (typeof spacing === 'number') {
-                return {top: spacing, right: spacing, bottom: spacing, left: spacing};
+        function clamp(x, min, max) {
+            return Math.max(min, Math.min(x, max));
+        }
+
+        // Enhanced measure function that handles both flex and block
+        function layoutMeasure(node, minW, maxW, minH, maxH) {
+            const availableW = maxW - node.marginHorizontal;
+            const availableH = maxH - node.marginVertical;
+
+            let w = node.width || availableW;
+            let h = node.height || availableH;
+
+            if (node.children.length > 0) {
+                const contentW = w - node.paddingHorizontal;
+                const contentH = h - node.paddingVertical;
+
+                if (node.display === 'flex') {
+                    // Existing flex layout logic
+                    layoutFlexChildren(node, contentW, contentH);
+                } else if (node.display === 'block') {
+                    // New block layout logic
+                    layoutBlockChildren(node, contentW, contentH);
+                }
+
+                // Calculate intrinsic size if not specified
+                if (!node.width) {
+                    w = calculateIntrinsicWidth(node) + node.paddingHorizontal;
+                }
+                if (!node.height) {
+                    h = calculateIntrinsicHeight(node) + node.paddingVertical;
+                }
             }
-            return {
-                top: spacing.top || 0,
-                right: spacing.right || 0,
-                bottom: spacing.bottom || 0,
-                left: spacing.left || 0
+
+            node.layout.w = clamp(w, minW, maxW);
+            node.layout.h = clamp(h, minH, maxH);
+
+            node.contentArea = {
+                x: 0, y: 0,
+                w: node.layout.w - node.paddingHorizontal,
+                h: node.layout.h - node.paddingVertical
             };
         }
 
-        get paddingHorizontal() {return this.padding.left + this.padding.right;}
-        get paddingVertical() {return this.padding.top + this.padding.bottom;}
-        get marginHorizontal() {return this.margin.left + this.margin.right;}
-        get marginVertical() {return this.margin.top + this.margin.bottom;}
-    }
-
-    // Helper functions
-    function clamp(x, min, max) {
-        return Math.max(min, Math.min(x, max));
-    }
-
-    function getMainAxisSize(node, layout) {
-        return node.flexDirection === 'row' ? layout.w : layout.h;
-    }
-
-    function getCrossAxisSize(node, layout) {
-        return node.flexDirection === 'row' ? layout.h : layout.w;
-    }
-
-    // Measure Pass: constraints go down, sizes go up
-    function layoutMeasure(node, minW, maxW, minH, maxH) {
-        // Account for margin in available space
-        const availableW = maxW - node.marginHorizontal;
-        const availableH = maxH - node.marginVertical;
-
-        let w = node.width || availableW;
-        let h = node.height || availableH;
-
-        if (node.display === 'flex' && node.children.length > 0) {
-            // Content area (inside padding)
-            const contentW = w - node.paddingHorizontal;
-            const contentH = h - node.paddingVertical;
-
+        function layoutFlexChildren(node, contentW, contentH) {
             let totalFlex = node.children.reduce((sum, c) => sum + (c.flexGrow || 0), 0);
             let fixedSize = 0;
             let flexChildren = [];
 
-            // Calculate total gap space
             const totalGap = Math.max(0, (node.children.length - 1) * node.gap);
 
             // First pass: measure fixed-size children
@@ -91,7 +114,6 @@
                 if (child.flexGrow > 0) {
                     flexChildren.push(child);
                 } else {
-                    // Fixed size child
                     if (node.flexDirection === 'row') {
                         const childMaxW = child.width || contentW;
                         const childMaxH = node.crossAxisAlignment === 'stretch' ? contentH : (child.height || contentH);
@@ -121,287 +143,350 @@
                     layoutMeasure(child, 0, childMaxW, 0, childH);
                 }
             }
+        }
 
-            // If node size wasn't specified, calculate it from children
-            if (!node.width) {
-                if (node.flexDirection === 'row') {
-                    const childrenWidth = node.children.reduce((sum, child) =>
-                        sum + child.layout.w + child.marginHorizontal, 0) + totalGap;
-                    w = childrenWidth + node.paddingHorizontal;
-                }
-            }
-
-            if (!node.height) {
-                if (node.flexDirection === 'column') {
-                    const childrenHeight = node.children.reduce((sum, child) =>
-                        sum + child.layout.h + child.marginVertical, 0) + totalGap;
-                    h = childrenHeight + node.paddingVertical;
-                }
+        function layoutBlockChildren(node, contentW, contentH) {
+            // For block layout, children stack vertically and take full width by default
+            for (const child of node.children) {
+                const childMaxW = child.width || contentW;
+                const childMaxH = child.height || contentH;
+                layoutMeasure(child, 0, childMaxW, 0, childMaxH);
             }
         }
 
-        node.layout.w = clamp(w, minW, maxW);
-        node.layout.h = clamp(h, minH, maxH);
+        function calculateIntrinsicWidth(node) {
+            if (node.children.length === 0) return 0;
 
-        // Calculate content area
-        node.contentArea = {
-            x: 0, y: 0, // Will be set in position pass
-            w: node.layout.w - node.paddingHorizontal,
-            h: node.layout.h - node.paddingVertical
-        };
-    }
-
-    // Position Pass: parent sets position
-    function layoutPosition(node, originX, originY) {
-        // Position including margin
-        node.layout.x = originX + node.margin.left;
-        node.layout.y = originY + node.margin.top;
-
-        // Content area position (inside padding)
-        node.contentArea.x = node.layout.x + node.padding.left;
-        node.contentArea.y = node.layout.y + node.padding.top;
-
-        if (node.display === 'flex' && node.children.length > 0) {
-            positionFlexChildren(node);
-        }
-    }
-
-    function positionFlexChildren(node) {
-        const isRow = node.flexDirection === 'row';
-        const children = node.children;
-        const totalGap = Math.max(0, (children.length - 1) * node.gap);
-
-        // Calculate total size of children along main axis
-        const childrenMainSize = children.reduce((sum, child) => {
-            const childSize = isRow ? (child.layout.w + child.marginHorizontal) : (child.layout.h + child.marginVertical);
-            return sum + childSize;
-        }, 0);
-
-        const mainAxisSize = isRow ? node.contentArea.w : node.contentArea.h;
-        const crossAxisSize = isRow ? node.contentArea.h : node.contentArea.w;
-        const freeSpace = mainAxisSize - childrenMainSize - totalGap;
-
-        // Calculate starting position and spacing based on main axis alignment
-        let mainStart = isRow ? node.contentArea.x : node.contentArea.y;
-        let spacing = 0;
-
-        switch (node.mainAxisAlignment) {
-            case 'center':
-                mainStart += freeSpace / 2;
-                break;
-            case 'end':
-                mainStart += freeSpace;
-                break;
-            case 'spaceBetween':
-                spacing = children.length > 1 ? freeSpace / (children.length - 1) : 0;
-                break;
-            case 'spaceAround':
-                spacing = freeSpace / children.length;
-                mainStart += spacing / 2;
-                break;
-            case 'spaceEvenly':
-                spacing = freeSpace / (children.length + 1);
-                mainStart += spacing;
-                break;
-            // 'start' is default - no adjustment needed
+            if (node.display === 'flex' && node.flexDirection === 'row') {
+                const totalGap = Math.max(0, (node.children.length - 1) * node.gap);
+                return node.children.reduce((sum, child) => 
+                    sum + child.layout.w + child.marginHorizontal, 0) + totalGap;
+            } else {
+                // For block or flex column, width is the widest child
+                return Math.max(...node.children.map(child => 
+                    child.layout.w + child.marginHorizontal));
+            }
         }
 
-        let cursor = mainStart;
+        function calculateIntrinsicHeight(node) {
+            if (node.children.length === 0) return 0;
 
-        for (const child of children) {
-            let childMainPos = cursor;
-            let childCrossPos;
+            if (node.display === 'flex' && node.flexDirection === 'column') {
+                const totalGap = Math.max(0, (node.children.length - 1) * node.gap);
+                return node.children.reduce((sum, child) => 
+                    sum + child.layout.h + child.marginVertical, 0) + totalGap;
+            } else if (node.display === 'block') {
+                // Block elements stack vertically with gaps
+                const totalGap = Math.max(0, (node.children.length - 1) * node.gap);
+                return node.children.reduce((sum, child) => 
+                    sum + child.layout.h + child.marginVertical, 0) + totalGap;
+            } else {
+                // For flex row, height is the tallest child
+                return Math.max(...node.children.map(child => 
+                    child.layout.h + child.marginVertical));
+            }
+        }
 
-            // Position along cross axis
-            const crossStart = isRow ? node.contentArea.y : node.contentArea.x;
-            const childCrossSize = isRow ? (child.layout.h + child.marginVertical) : (child.layout.w + child.marginHorizontal);
+        // Enhanced position function
+        function layoutPosition(node, originX, originY) {
+            node.layout.x = originX + node.margin.left;
+            node.layout.y = originY + node.margin.top;
 
-            switch (node.crossAxisAlignment) {
+            node.contentArea.x = node.layout.x + node.padding.left;
+            node.contentArea.y = node.layout.y + node.padding.top;
+
+            if (node.children.length > 0) {
+                if (node.display === 'flex') {
+                    positionFlexChildren(node);
+                } else if (node.display === 'block') {
+                    positionBlockChildren(node);
+                }
+            }
+        }
+
+        function positionFlexChildren(node) {
+            const isRow = node.flexDirection === 'row';
+            const children = node.children;
+            const totalGap = Math.max(0, (children.length - 1) * node.gap);
+
+            const childrenMainSize = children.reduce((sum, child) => {
+                const childSize = isRow ? (child.layout.w + child.marginHorizontal) : (child.layout.h + child.marginVertical);
+                return sum + childSize;
+            }, 0);
+
+            const mainAxisSize = isRow ? node.contentArea.w : node.contentArea.h;
+            const crossAxisSize = isRow ? node.contentArea.h : node.contentArea.w;
+            const freeSpace = mainAxisSize - childrenMainSize - totalGap;
+
+            let mainStart = isRow ? node.contentArea.x : node.contentArea.y;
+            let spacing = 0;
+
+            switch (node.mainAxisAlignment) {
                 case 'center':
-                    childCrossPos = crossStart + (crossAxisSize - childCrossSize) / 2;
+                    mainStart += freeSpace / 2;
                     break;
                 case 'end':
-                    childCrossPos = crossStart + crossAxisSize - childCrossSize;
+                    mainStart += freeSpace;
                     break;
-                case 'stretch':
-                case 'start':
-                default:
-                    childCrossPos = crossStart;
+                case 'spaceBetween':
+                    spacing = children.length > 1 ? freeSpace / (children.length - 1) : 0;
+                    break;
+                case 'spaceAround':
+                    spacing = freeSpace / children.length;
+                    mainStart += spacing / 2;
+                    break;
+                case 'spaceEvenly':
+                    spacing = freeSpace / (children.length + 1);
+                    mainStart += spacing;
                     break;
             }
 
-            // Set child position
-            if (isRow) {
-                layoutPosition(child, childMainPos, childCrossPos);
-                cursor += child.layout.w + child.marginHorizontal + node.gap + spacing;
-            } else {
-                layoutPosition(child, childCrossPos, childMainPos);
-                cursor += child.layout.h + child.marginVertical + node.gap + spacing;
+            let cursor = mainStart;
+
+            for (const child of children) {
+                let childMainPos = cursor;
+                let childCrossPos;
+
+                const crossStart = isRow ? node.contentArea.y : node.contentArea.x;
+                const childCrossSize = isRow ? (child.layout.h + child.marginVertical) : (child.layout.w + child.marginHorizontal);
+
+                switch (node.crossAxisAlignment) {
+                    case 'center':
+                        childCrossPos = crossStart + (crossAxisSize - childCrossSize) / 2;
+                        break;
+                    case 'end':
+                        childCrossPos = crossStart + crossAxisSize - childCrossSize;
+                        break;
+                    case 'stretch':
+                    case 'start':
+                    default:
+                        childCrossPos = crossStart;
+                        break;
+                }
+
+                if (isRow) {
+                    layoutPosition(child, childMainPos, childCrossPos);
+                    cursor += child.layout.w + child.marginHorizontal + node.gap + spacing;
+                } else {
+                    layoutPosition(child, childCrossPos, childMainPos);
+                    cursor += child.layout.h + child.marginVertical + node.gap + spacing;
+                }
             }
         }
-    }
 
-    // Render to canvas
-    function renderNode(ctx, node) {
-        // Draw margin (light red)
-        if (node.marginHorizontal > 0 || node.marginVertical > 0) {
-            ctx.fillStyle = 'rgba(255, 200, 200, 0.3)';
-            ctx.fillRect(
-                node.layout.x - node.margin.left,
-                node.layout.y - node.margin.top,
-                node.layout.w + node.marginHorizontal,
-                node.layout.h + node.marginVertical
-            );
+        function positionBlockChildren(node) {
+            let cursor = node.contentArea.y;
+
+            for (const child of node.children) {
+                // Block children are positioned at the left edge of content area
+                // and stack vertically
+                layoutPosition(child, node.contentArea.x, cursor);
+                cursor += child.layout.h + child.marginVertical + node.gap;
+            }
         }
 
-        // Draw main box
-        const colors = {
-            toolbar: '#4a90e2',
-            sidebar: '#7ed321',
-            canvas: '#f5a623',
-            main: '#bd10e0',
-            root: '#b8e986',
-            card: '#50e3c2',
-            button: '#d0021b'
-        };
+        // Render function with better visual distinction
+        function renderNode(ctx, node) {
+            // Draw margin (light red)
+            if (node.marginHorizontal > 0 || node.marginVertical > 0) {
+                ctx.fillStyle = 'rgba(255, 200, 200, 0.3)';
+                ctx.fillRect(
+                    node.layout.x - node.margin.left,
+                    node.layout.y - node.margin.top,
+                    node.layout.w + node.marginHorizontal,
+                    node.layout.h + node.marginVertical
+                );
+            }
 
-        ctx.fillStyle = colors[node.name] || '#e8e8e8';
-        ctx.fillRect(node.layout.x, node.layout.y, node.layout.w, node.layout.h);
+            // Different colors for different display types
+            const colors = {
+                toolbar: '#4a90e2',
+                sidebar: '#7ed321',
+                canvas: '#f5a623',
+                main: '#bd10e0',
+                root: '#b8e986',
+                card: '#50e3c2',
+                button: '#d0021b',
+                article: '#9013fe',
+                paragraph: '#f8e71c',
+                section: '#4bd5ee'
+            };
 
-        // Draw padding (light blue)
-        if (node.paddingHorizontal > 0 || node.paddingVertical > 0) {
-            ctx.fillStyle = 'rgba(200, 200, 255, 0.2)';
-            // contentArea is just the layout area with padding
-            ctx.fillRect(node.contentArea.x, node.contentArea.y, node.contentArea.w, node.contentArea.h);
+            // Slightly different styling for block vs flex
+            let fillColor = colors[node.name] || '#e8e8e8';
+            if (node.display === 'block') {
+                fillColor = colors[node.name] || '#f0f0f0';
+            }
+
+            ctx.fillStyle = fillColor;
+            ctx.fillRect(node.layout.x, node.layout.y, node.layout.w, node.layout.h);
+
+            // Draw padding (light blue)
+            if (node.paddingHorizontal > 0 || node.paddingVertical > 0) {
+                ctx.fillStyle = 'rgba(200, 200, 255, 0.2)';
+                ctx.fillRect(node.contentArea.x, node.contentArea.y, node.contentArea.w, node.contentArea.h);
+            }
+
+            // Different border styles for different display types
+            ctx.strokeStyle = node.display === 'block' ? '#666' : '#000';
+            ctx.lineWidth = node.display === 'block' ? 2 : 1;
+            ctx.strokeRect(node.layout.x, node.layout.y, node.layout.w, node.layout.h);
+
+            // Draw text with display type
+            ctx.fillStyle = '#000';
+            ctx.font = '10px sans-serif';
+            const text = `${node.name} (${node.display}) ${Math.round(node.layout.w)}×${Math.round(node.layout.h)}`;
+            ctx.fillText(text, node.layout.x + 2, node.layout.y + 12);
+
+            for (const child of node.children) {
+                renderNode(ctx, child);
+            }
         }
 
-        // Draw border
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(node.layout.x, node.layout.y, node.layout.w, node.layout.h);
+        // Create a demo that shows both flex and block layouts
+        const paragraph1 = new Node({
+            name: 'paragraph',
+            display: 'block',
+            height: 40,
+            margin: {top: 10, bottom: 10},
+            padding: 10
+        });
 
-        // Draw text
-        ctx.fillStyle = '#000';
-        ctx.font = '11px sans-serif';
-        const text = `${node.name} (${Math.round(node.layout.w)}×${Math.round(node.layout.h)})`;
-        ctx.fillText(text, node.layout.x + 2, node.layout.y + 12);
+        const paragraph2 = new Node({
+            name: 'paragraph',
+            display: 'block',
+            height: 60,
+            margin: {top: 5, bottom: 15},
+            padding: 10
+        });
 
-        for (const child of node.children) {
-            renderNode(ctx, child);
+        const article = new Node({
+            name: 'article',
+            display: 'block',
+            padding: 20,
+            margin: 10,
+            children: [paragraph1, paragraph2]
+        });
+
+        const button1 = new Node({
+            name: 'button',
+            width: 80,
+            height: 30,
+            margin: 5,
+            padding: 8
+        });
+
+        const button2 = new Node({
+            name: 'button',
+            width: 100,
+            height: 30,
+            margin: 5,
+            padding: 8
+        });
+
+        const card = new Node({
+            name: 'card',
+            width: 150,
+            padding: 15,
+            margin: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            children: [button1, button2]
+        });
+
+        const section = new Node({
+            name: 'section',
+            display: 'block',
+            padding: 15,
+            margin: 10,
+            children: [article, card]
+        });
+
+        const sidebar = new Node({
+            name: 'sidebar',
+            width: 250,
+            padding: 10,
+            display: 'block',
+            children: [section]
+        });
+
+        const canvas = new Node({
+            name: 'canvas',
+            flexGrow: 1,
+            margin: {top: 0, right: 10, bottom: 10, left: 0},
+            padding: 20
+        });
+
+        const main = new Node({
+            name: 'main',
+            display: 'flex',
+            flexDirection: 'row',
+            flexGrow: 1,
+            gap: 10,
+            padding: 10,
+            children: [sidebar, canvas]
+        });
+
+        const toolbar = new Node({
+            name: 'toolbar',
+            height: 50,
+            padding: 15,
+            display: 'flex',
+            flexDirection: 'row',
+            mainAxisAlignment: 'spaceBetween',
+            crossAxisAlignment: 'center'
+        });
+
+        const root = new Node({
+            name: 'root',
+            display: 'flex',
+            flexDirection: 'column',
+            width: 800,
+            height: 600,
+            children: [toolbar, main]
+        });
+
+        // Run layout
+        layoutMeasure(root, 0, 800, 0, 600);
+        layoutPosition(root, 0, 0);
+
+        // Draw
+        const canvasEl = document.getElementById('uiCanvas');
+        const ctx = canvasEl.getContext('2d');
+        ctx.clearRect(0, 0, 800, 600);
+        renderNode(ctx, root);
+
+        // Debug output
+        console.log('Layout Results:');
+        function printLayout(node, indent = 0) {
+            const spaces = '  '.repeat(indent);
+            const margin = `m:${node.margin.top},${node.margin.right},${node.margin.bottom},${node.margin.left}`;
+            const padding = `p:${node.padding.top},${node.padding.right},${node.padding.bottom},${node.padding.left}`;
+            console.log(`${spaces}${node.name} (${node.display}): ${node.layout.x},${node.layout.y} ${node.layout.w}×${node.layout.h} ${margin} ${padding}`);
+            for (const child of node.children) {
+                printLayout(child, indent + 1);
+            }
         }
-    }
+        printLayout(root);
 
-    // Create more complex layout tree to demonstrate features
-    const button1 = new Node({
-        name: 'button',
-        width: 80,
-        height: 30,
-        margin: 5,
-        padding: {top: 5, right: 10, bottom: 5, left: 10}
-    });
+        // Handle window resize
+        let resizeTimeout;
+        window.addEventListener("resize", (e) => {
+            if (resizeTimeout) clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                canvasEl.width = Math.min(window.innerWidth - 20, 1200);
+                canvasEl.height = Math.min(window.innerHeight - 20, 800);
 
-    const button2 = new Node({
-        name: 'button',
-        width: 100,
-        height: 30,
-        margin: 5,
-        padding: 8
-    });
+                root.width = canvasEl.width;
+                root.height = canvasEl.height;
+                layoutMeasure(root, 0, canvasEl.width, 0, canvasEl.height);
+                layoutPosition(root, 0, 0);
 
-    const card = new Node({
-        name: 'card',
-        width: 150,
-        padding: 15,
-        margin: 10,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-        children: [button1, button2]
-    });
-
-    const sidebar = new Node({
-        name: 'sidebar',
-        width: 200,
-        padding: 10,
-        display: 'flex',
-        flexDirection: 'column',
-        crossAxisAlignment: 'center',
-        children: [card]
-    });
-
-    const canvas = new Node({
-        name: 'canvas',
-        flexGrow: 1,
-        margin: {top: 0, right: 10, bottom: 10, left: 0},
-        padding: 20
-    });
-
-    const main = new Node({
-        name: 'main',
-        display: 'flex',
-        flexDirection: 'row',
-        flexGrow: 1,
-        gap: 10,
-        padding: 10,
-        children: [sidebar, canvas]
-    });
-
-    const toolbar = new Node({
-        name: 'toolbar',
-        height: 50,
-        padding: {top: 10, right: 15, bottom: 10, left: 15},
-        display: 'flex',
-        flexDirection: 'row',
-        mainAxisAlignment: 'spaceBetween',
-        crossAxisAlignment: 'center'
-    });
-
-    const root = new Node({
-        name: 'root',
-        display: 'flex',
-        flexDirection: 'column',
-        width: 800,
-        height: 600,
-        children: [toolbar, main]
-    });
-
-    // Run layout
-    layoutMeasure(root, 0, 800, 0, 600);
-    layoutPosition(root, 0, 0);
-
-    // Draw
-    const canvasEl = document.getElementById('uiCanvas');
-    const ctx = canvasEl.getContext('2d');
-    ctx.clearRect(0, 0, 800, 600);
-    renderNode(ctx, root);
-
-    // Debug output
-    console.log('Layout Results:');
-    function printLayout(node, indent = 0) {
-        const spaces = '  '.repeat(indent);
-        const margin = `m:${node.margin.top},${node.margin.right},${node.margin.bottom},${node.margin.left}`;
-        const padding = `p:${node.padding.top},${node.padding.right},${node.padding.bottom},${node.padding.left}`;
-        console.log(`${spaces}${node.name}: ${node.layout.x},${node.layout.y} ${node.layout.w}×${node.layout.h} ${margin} ${padding}`);
-        for (const child of node.children) {
-            printLayout(child, indent + 1);
-        }
-    }
-    printLayout(root);
-
-    let idt;
-    window.addEventListener("resize", (e) => {
-        if (idt) clearTimeout(idt);
-        idt = setTimeout(() => {
-            canvasEl.width = document.body.clientWidth;
-            canvasEl.height = window.innerHeight;
-
-            root.width = canvasEl.width;
-            root.height = canvasEl.height;
-            layoutMeasure(root, 0, canvasEl.width, 0, canvasEl.height);
-            layoutPosition(root, 0, 0);
-
-            ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-            renderNode(ctx, root);
-        }, 100);
-    });
-</script>
+                ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+                renderNode(ctx, root);
+            }, 100);
+        });
+    </script>
+</body>
+</html>

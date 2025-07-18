@@ -7,11 +7,20 @@
 #include <string.h>
 
 static void draw_element(ui_state_t *state, ui_element_t *root);
-static void layout_block_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
-static void layout_aligned_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
-static void layout_flex_row_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
-static void layout_flex_col_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
-static int32_t resolve_unit(ui_value_t value, int32_t max);
+// static void layout_block_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
+static void layout_block_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height);
+static void layout_flex_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height);
+// static void layout_aligned_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
+// static void layout_flex_row_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
+// static void layout_flex_col_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints);
+static void position_block_children(ui_state_t *state, ui_element_t *element);
+static void position_flex_children(ui_state_t *state, ui_element_t *element);
+static float parse_value(ui_value_t value, float max);
+static float parse_spacing_axis(ui_spacing_t spacing, float comparison_value, bool horizontal);
+static float parse_spacing(ui_value_t spacing, float comparison_size);
+
+#define UI_HORIZONTAL true
+#define UI_VERTICAL false
 
 bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height) {
     assert(state && "UI state must be a valid pointer");
@@ -32,11 +41,12 @@ bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height)
     // Add ROOT by default (the size of window)
     ui_element_t *root = &state->elements[UI_ROOT_ID];
     root->id = UI_ROOT_ID;
-    root->type = UI_ELEMENT_TYPE_BLOCK;
-    root->desired_width = UI_VALUE(root_width, UI_UNIT_PIXEL);
-    root->desired_height = UI_VALUE(root_height, UI_UNIT_PIXEL);
-    root->computed_rect.width = root_width;
-    root->computed_rect.height = root_height;
+    root->width = UI_VALUE(root_width, UI_UNIT_PIXEL);
+    root->height = UI_VALUE(root_height, UI_UNIT_PIXEL);
+    root->computed.layout.width = root_width;
+    root->computed.layout.height = root_height;
+    root->computed.content.width = root_width;
+    root->computed.content.height = root_height;
 
     return true;
 }
@@ -47,8 +57,7 @@ ui_element_t ui_create_element(void) {
         .parent_id = -1,
         .first_child_id = -1,
         .next_sibling_id = -1,
-        .type = UI_ELEMENT_TYPE_BLOCK,
-        .background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f},
+        .base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f},
     };
 
     return default_element;
@@ -134,62 +143,80 @@ void ui_remove_element(ui_state_t *state, uint16_t id) {
     }
 }
 
-void ui_layout(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints, float2_t cursor) {
+void ui_layout_measure(ui_state_t *state, ui_element_t *element, uint16_t min_width, uint16_t max_width, uint16_t min_height, uint16_t max_height) {
     assert(state && "UI state must be a valid pointer");
     assert(element && "UI element must be a valid pointer");
 
-    // Get the desired dimensions of the element
-    int32_t dw = resolve_unit(element->desired_width, constraints.max_width);
-    int32_t dh = resolve_unit(element->desired_height, constraints.max_height);
+    float available_width = max_width - parse_spacing_axis(element->margin, max_width, UI_HORIZONTAL);
+    float available_height = max_height - parse_spacing_axis(element->margin, max_height, UI_VERTICAL);
 
-    // Apply constraints to desired dimensions
-    int32_t w = CLAMP(dw, constraints.min_width, constraints.max_width);
-    int32_t h = CLAMP(dh, constraints.min_height, constraints.max_height);
+    float width = parse_value(element->width, available_width);
+    float height = parse_value(element->height, available_height);
 
-    // Resolve padding
-    int32_t pt = resolve_unit(element->padding.top, h);
-    int32_t pr = resolve_unit(element->padding.right, w);
-    int32_t pb = resolve_unit(element->padding.bottom, h);
-    int32_t pl = resolve_unit(element->padding.left, w);
+    float px = parse_spacing_axis(element->padding, max_width, UI_HORIZONTAL);
+    float py = parse_spacing_axis(element->padding, max_height, UI_VERTICAL);
 
-    // Resolve margin
-    int32_t mt = resolve_unit(element->margin.top, h);
-    int32_t ml = resolve_unit(element->margin.left, w);
+    if (element->first_child_id > -1) {
+        float content_width = width - px;
+        float content_height = height - py;
 
-    // Compute absolute position
-    int32_t x = cursor.x + ml;
-    int32_t y = cursor.y + mt;
+        switch (element->type) {
+            case UI_ELEMENT_TYPE_FLEX:
+                layout_flex_children(state, element, content_width, content_height);
+                break;
+            case UI_ELEMENT_TYPE_BLOCK:
+                layout_block_children(state, element, content_width, content_height);
+                break;
+            case UI_ELEMENT_TYPE_ALIGNED:
+                LOG("Aligned element type has not been implemented yet!");
+                return;
+            default:
+                LOG("Unknown element type");
+                return;
+        }
 
-    // Save computed size of element
-    element->computed_rect.x = x;
-    element->computed_rect.y = y;
-    element->computed_rect.width = w;
-    element->computed_rect.height = h;
+        // Calculate intrinsic size
+        if (element->width.unit == UI_UNIT_AUTO) {
+            // TODO:
+        }
+        if (element->height.unit == UI_UNIT_AUTO) {
+            // TODO:
+        }
+    }
 
-    // Calculate the constraints to pass on
-    ui_constraints_t inner_constraints = {
-        .min_width = 0,
-        .min_height = 0,
-        .max_width = w - (pl + pr),
-        .max_height = h - (pt + pb)};
+    // Save out the computed box size -- this is the full size of the box
+    element->computed.layout.width = CLAMP(width, min_width, available_width);
+    element->computed.layout.height = CLAMP(height, min_height, available_height);
 
-    switch (element->type) {
-        case UI_ELEMENT_TYPE_BLOCK:
-            layout_block_children(state, element, inner_constraints);
-            break;
-        case UI_ELEMENT_TYPE_ALIGNED:
-            layout_aligned_children(state, element, inner_constraints);
-            break;
-        case UI_ELEMENT_TYPE_FLEX_ROW:
-            layout_flex_row_children(state, element, inner_constraints);
-            break;
-        case UI_ELEMENT_TYPE_FLEX_COL:
-            layout_flex_col_children(state, element, inner_constraints);
-            break;
+    // Save the computed content size -- this is the usable area for children
+    element->computed.content.width = element->computed.layout.width - px;
+    element->computed.content.height = element->computed.layout.height - py;
+}
 
-        default: {
-            LOG("Unknown UI element type");
-            return;
+void ui_layout_position(ui_state_t *state, ui_element_t *element, float origin_x, float origin_y) {
+    // Grab the parent for percentage calculations where it applies (margin, padding...etc)
+    ui_element_t *parent = element->parent_id > -1 ? &state->elements[element->parent_id] : &state->elements[0];
+
+    element->computed.layout.x = origin_x + parse_spacing(element->margin.left, parent->computed.layout.width);
+    element->computed.layout.y = origin_y + parse_spacing(element->margin.top, parent->computed.layout.width);
+
+    element->computed.content.x = element->computed.layout.x + parse_spacing(element->padding.left, parent->computed.layout.width);
+    element->computed.content.y = element->computed.layout.y + parse_spacing(element->padding.top, parent->computed.layout.width);
+
+    if (element->first_child_id > -1) {
+        switch (element->type) {
+            case UI_ELEMENT_TYPE_FLEX:
+                position_flex_children(state, element);
+                break;
+            case UI_ELEMENT_TYPE_BLOCK:
+                position_block_children(state, element);
+                break;
+            case UI_ELEMENT_TYPE_ALIGNED:
+                LOG("Aligned element type has not been implemented yet!");
+                return;
+            default:
+                LOG("Unknown element type");
+                return;
         }
     }
 }
@@ -210,145 +237,221 @@ void ui_draw(ui_state_t *state, ui_element_t *root) {
 static void draw_element(ui_state_t *state, ui_element_t *root) {
     ui_draw_command_t *command = &state->draw_list.commands[state->draw_list.count];
 
-    command->position = rect_to_position(root->computed_rect);
-    command->size = rect_to_size(root->computed_rect);
-    command->background_color = root->background_color;
-    command->background_image = root->background_image;
+    command->position = rect_to_position(root->computed.layout);
+    command->size = rect_to_size(root->computed.layout);
+    command->background_color = root->base_style.background_color;
+    command->background_image = root->base_style.background_image;
 
     state->draw_list.count++;
 }
 
-static void layout_block_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints) {
-    int32_t parent_padding_top = resolve_unit(element->padding.top, element->computed_rect.height);
-    int32_t parent_padding_left = resolve_unit(element->padding.left, element->computed_rect.width);
-
-    // Initialize local cursor using parent's padding
-    float2_t cursor = {
-        .x = element->computed_rect.x + parent_padding_left,
-        .y = element->computed_rect.y + parent_padding_top,
-    };
-
-    // Traverse children
+static void layout_block_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height) {
     int32_t child_idx = element->first_child_id;
     while (child_idx != -1) {
         ui_element_t *child = &state->elements[child_idx];
 
-        // Measure size of child
-        ui_layout(state, child, constraints, cursor);
-
-        // Advance local cursor by the computed height of the element and the top and bottom margins
-        // FIXME: I suspect a bug here with the margins...
-        cursor.x += child->computed_rect.height +
-                    resolve_unit(child->margin.bottom, child->computed_rect.height) +
-                    resolve_unit(child->margin.top, child->computed_rect.height);
+        float child_max_w = parse_value(child->width, content_width);
+        float child_max_h = parse_value(child->height, content_height);
+        ui_layout_measure(state, child, 0, child_max_w, 0, child_max_h);
 
         child_idx = child->next_sibling_id;
     }
 }
 
-static void layout_aligned_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints) {
-    int32_t parent_padding_top = resolve_unit(element->padding.top, element->computed_rect.height);
-    int32_t parent_padding_left = resolve_unit(element->padding.left, element->computed_rect.width);
+static void layout_flex_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height) {
+    // HACK: Using a simple fixed array for gather for now
+    // Find better method -- maybe even a dynamic array (spk_array)
+    ui_element_t *flex_children[16];
+    uint8_t flex_children_count = 0;
 
-    // ALIGNED elements can only have a SINGLE child
-    int32_t child_idx = element->first_child_id;
-    if (child_idx == -1) return;
+    uint16_t total_flex_amount = 0;
+    float total_fixed_size = 0.0f;
+    uint16_t total_children_count = 0;
 
-    ui_element_t *child = &state->elements[child_idx];
-
-    // NOTE: Passing in dummy cursor as we will overwrite it later
-    ui_layout(state, child, constraints, (float2_t){0, 0});
-
-    // Resolve margins
-    int32_t mt = resolve_unit(element->margin.top, child->computed_rect.height);
-    int32_t mr = resolve_unit(element->margin.right, child->computed_rect.width);
-    int32_t mb = resolve_unit(element->margin.bottom, child->computed_rect.height);
-    int32_t ml = resolve_unit(element->margin.left, child->computed_rect.width);
-
-    // TODO: Expand this to other alignments, for now it's CENTER only
-    uint16_t aw = constraints.max_width - (ml + mr);
-    uint16_t ah = constraints.max_height - (mt + mb);
-
-    // Recompute position
-    child->computed_rect.x += parent_padding_left + ml + (aw - child->computed_rect.width) / 2;
-    child->computed_rect.y += parent_padding_top + mt + (ah - child->computed_rect.height) / 2;
-}
-
-static void layout_flex_row_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints) {
-    int32_t parent_padding_top = resolve_unit(element->padding.top, element->computed_rect.height);
-    int32_t parent_padding_left = resolve_unit(element->padding.left, element->computed_rect.width);
-
-    float2_t gap = {
-        .x = resolve_unit(element->gap.x, element->computed_rect.width),
-        .y = resolve_unit(element->gap.y, element->computed_rect.height),
-    };
-
-    // Initialize local cursor using parent's padding
-    float2_t cursor = {
-        .x = element->computed_rect.x + parent_padding_left,
-        .y = element->computed_rect.y + parent_padding_top,
-    };
-
-    // 1st Pass: Gather children and do some calculations
-    struct child_info {
-        uint16_t idx;
-        uint16_t dw, dh;
-    };
-
-    struct child_info children_info[16];
-    int children_info_count = 0;
+    // First pass: measure and gather children
     int32_t child_idx = element->first_child_id;
     while (child_idx != -1) {
         ui_element_t *child = &state->elements[child_idx];
 
-        children_info[children_info_count].idx = child_idx;
-        children_info[children_info_count].dw = resolve_unit(child->desired_width, constraints.max_width);
-        children_info[children_info_count].dh = resolve_unit(child->desired_height, constraints.max_height);
-        children_info_count++;
+        // Count the child into total
+        total_children_count++;
+
+        if (child->flex_grow > 0) {
+            total_flex_amount += child->flex_grow;
+            flex_children[flex_children_count++] = child;
+        } else {
+            if (child->flex_direction == UI_FLEX_DIRECTION_ROW) {
+                float child_max_w = parse_value(child->width, content_width);
+                float child_max_h = element->flex_cross_axis_alignment == UI_FLEX_ALIGN_STRETCH ? content_height : parse_value(child->height, content_height);
+                ui_layout_measure(state, child, 0, child_max_w, 0, child_max_h);
+                total_fixed_size += child->computed.layout.width + parse_spacing_axis(child->margin, content_width, UI_HORIZONTAL);
+            } else {
+                float child_max_w = element->flex_cross_axis_alignment == UI_FLEX_ALIGN_STRETCH ? content_width : parse_value(child->width, content_width);
+                float child_max_h = parse_value(child->height, content_height);
+                ui_layout_measure(state, child, 0, child_max_w, 0, child_max_h);
+                total_fixed_size += child->computed.layout.height + parse_spacing_axis(child->margin, content_height, UI_VERTICAL);
+            }
+        }
+        child_idx = child->next_sibling_id;
+    }
+
+    // NOTE: Gap size when defined in percentage should be based on the width and height of the element it is
+    // set on, which our case is the `element`, meaning we can use its computed with and height to parsing the value
+    float total_gap_x = MAX(0, (total_children_count - 1) * parse_spacing(element->gap.x, element->computed.layout.width));
+    float total_gap_y = MAX(0, (total_children_count - 1) * parse_spacing(element->gap.y, element->computed.layout.height));
+
+    // Calculate the remaining space -- how much we still have where we can distribute the flexible children
+    float main_axis_content_size = element->flex_direction == UI_FLEX_DIRECTION_ROW ? content_width : content_height;
+    float remaining_space_x = MAX(0, main_axis_content_size - total_fixed_size - total_gap_x);
+    float remaining_space_y = MAX(0, main_axis_content_size - total_fixed_size - total_gap_y);
+
+    // Second pass: distribute flexible children
+    for (uint16_t i = 0; i < flex_children_count; ++i) {
+        ui_element_t *child = flex_children[i];
+
+        if (element->flex_direction == UI_FLEX_DIRECTION_ROW) {
+            float child_width = remaining_space_x * (child->flex_grow / (float)total_flex_amount);
+            float child_max_h = element->flex_cross_axis_alignment == UI_FLEX_ALIGN_STRETCH ? content_height : parse_value(child->height, content_height);
+            ui_layout_measure(state, child, 0, child_width, 0, child_max_h);
+        } else {
+            float child_max_w = element->flex_cross_axis_alignment == UI_FLEX_ALIGN_STRETCH ? content_width : parse_value(child->width, content_width);
+            float child_height = remaining_space_y * (child->flex_grow / (float)total_flex_amount);
+            ui_layout_measure(state, child, 0, child_max_w, 0, child_height);
+        }
+    }
+}
+
+static void position_block_children(ui_state_t *state, ui_element_t *element) {
+    float cursor_y = element->computed.content.y;
+
+    int32_t child_idx = element->first_child_id;
+    while (child_idx != -1) {
+        ui_element_t *child = &state->elements[child_idx];
+
+        ui_layout_position(state, child, element->computed.content.x, cursor_y);
+        cursor_y += child->computed.layout.height + parse_spacing_axis(child->margin, element->computed.content.width, UI_VERTICAL);
+
+        child_idx = child->next_sibling_id;
+    }
+}
+
+static void position_flex_children(ui_state_t *state, ui_element_t *element) {
+    bool is_row = element->flex_direction == UI_FLEX_DIRECTION_ROW;
+
+    ui_element_t *children[16];
+    uint16_t children_count = 0;
+    float children_size = 0;
+
+    // Gather up the children again so we can calculate the size
+    int32_t child_idx = element->first_child_id;
+    while (child_idx != -1) {
+        ui_element_t *child = &state->elements[child_idx];
+
+        children_size += is_row ? child->computed.layout.width + parse_spacing_axis(child->margin, element->computed.content.width, UI_HORIZONTAL) : child->computed.layout.height + parse_spacing_axis(child->margin, element->computed.content.width, UI_VERTICAL);
+        children[children_count++] = child;
 
         child_idx = child->next_sibling_id;
     }
 
-    // 2nd Pass: Distribute sizes and positions
-    int32_t available_width = constraints.max_width - (gap.x * (children_info_count - 1));
-    int32_t parent_center_y = constraints.max_height / 2;
+    float total_gap_x = MAX(0, (children_count - 1) * parse_spacing(element->gap.x, element->computed.layout.width));
+    float total_gap_y = MAX(0, (children_count - 1) * parse_spacing(element->gap.y, element->computed.layout.height));
+    float total_gap = is_row ? total_gap_x : total_gap_y;
 
-    for (int i = 0; i < children_info_count; ++i) {
-        ui_element_t *child = &state->elements[children_info[i].idx];
+    float main_axis_size = is_row ? element->computed.content.width : element->computed.content.height;
+    float cross_axis_size = is_row ? element->computed.content.height : element->computed.content.width;
 
-        ui_constraints_t c = {
-            .min_width = available_width / children_info_count,
-            .min_height = 0,
-            .max_width = available_width / children_info_count,
-            .max_height = constraints.max_height,
-        };
+    float free_space = main_axis_size - children_size - total_gap;
+    float cursor = is_row ? element->computed.content.x : element->computed.content.y;
+    float spacing = 0.0f;
 
-        // Measure the size
-        ui_layout(state, child, c, (float2_t){0, 0});
+    switch (element->flex_main_axis_alignment) {
+        case UI_FLEX_ALIGN_CENTER:
+            cursor += free_space * 0.5f;
+            break;
+        case UI_FLEX_ALIGN_END:
+            cursor += free_space;
+            break;
+        case UI_FLEX_ALIGN_SPACE_BETWEEN:
+            spacing = children_count > 1 ? free_space / (children_count - 1) : 0.0f;
+            break;
+        case UI_FLEX_ALIGN_SPACE_AROUND:
+            spacing = free_space / children_count;
+            cursor += spacing * 0.5f;
+            break;
+        case UI_FLEX_ALIGN_SPACE_EVENLY:
+            spacing = free_space / (children_count - 1);
+            cursor += spacing;
+            break;
+        default:
+            break;
+    }
 
-        // Correct the layout if needed based on the alignment
-        child->computed_rect.y += parent_center_y - child->computed_rect.height / 2;
+    for (uint16_t i = 0; i < children_count; ++i) {
+        ui_element_t *child = children[i];
 
-        // We call layout again to recalculate with new position
-        ui_layout(state, child, c, (float2_t){cursor.x, child->computed_rect.y});
+        float cross_start = is_row ? element->computed.content.y : element->computed.content.x;
+        float child_cross_size = is_row ? (child->computed.layout.height + parse_spacing_axis(child->margin, element->computed.layout.width, UI_VERTICAL)) : (child->computed.layout.width + parse_spacing_axis(child->margin, element->computed.layout.width, UI_HORIZONTAL));
 
-        cursor.x += child->computed_rect.width + gap.x;
+        float child_cross_pos = 0.0f;
+
+        switch (element->flex_cross_axis_alignment) {
+            case UI_FLEX_ALIGN_CENTER:
+                child_cross_pos = cross_start + (cross_axis_size - child_cross_size) * 0.5f;
+                break;
+            case UI_FLEX_ALIGN_END:
+                child_cross_pos = cross_start + cross_axis_size - child_cross_size;
+                break;
+            default:
+                child_cross_pos = cross_start;
+                break;
+        }
+
+        if (is_row) {
+            ui_layout_position(state, child, cursor, child_cross_pos);
+            cursor += child->computed.layout.width +
+                parse_spacing_axis(child->margin, element->computed.layout.width, UI_HORIZONTAL) +
+                spacing;
+
+            if (i < children_count - 1) {
+                cursor += parse_spacing(element->gap.x, element->computed.layout.width);
+            }
+        } else {
+            ui_layout_position(state, child, child_cross_pos, cursor);
+            cursor += child->computed.layout.height +
+                parse_spacing_axis(child->margin, element->computed.layout.width, UI_VERTICAL) +
+                spacing;
+
+            if (i < children_count - 1) {
+                cursor += parse_spacing(element->gap.y, element->computed.layout.height);
+            }
+        }
     }
 }
 
-static void layout_flex_col_children(ui_state_t *state, ui_element_t *element, ui_constraints_t constraints) {
-    UNUSED(state);
-    UNUSED(element);
-    UNUSED(constraints);
-}
-
-static int32_t resolve_unit(ui_value_t value, int32_t max) {
+static float parse_value(ui_value_t value, float max) {
     switch (value.unit) {
         case UI_UNIT_PIXEL:
             return value.value;
         case UI_UNIT_PERCENT:
-            return (value.value * 0.01) * max;
-        case UI_UNIT_FLEX:
-            return value.value;
+            return (value.value * 0.01f) * max;
+        case UI_UNIT_AUTO:
+            return max;
     }
+}
+
+static float parse_spacing(ui_value_t spacing, float comparison_size) {
+    switch (spacing.unit) {
+        case UI_UNIT_PIXEL:
+            return spacing.value;
+        case UI_UNIT_PERCENT:
+            return (spacing.value * 0.01f) * comparison_size;
+        case UI_UNIT_AUTO:
+            return 0;
+    }
+}
+
+static float parse_spacing_axis(ui_spacing_t spacing, float comparison_value, bool horizontal) {
+    float s1 = parse_spacing(horizontal ? spacing.left : spacing.top, comparison_value);
+    float s2 = parse_spacing(horizontal ? spacing.right : spacing.bottom, comparison_value);
+    return s1 + s2;
 }
