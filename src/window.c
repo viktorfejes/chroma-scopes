@@ -8,6 +8,7 @@
 #define DEFAULT_WIN_CLASS_NAME L"DefaultWinClassName"
 
 static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param);
+static BOOL window_resizing(WPARAM w_param, LPARAM l_param);
 
 bool window_create(const char *title, uint16_t width, uint16_t height, window_t *out_window) {
     assert(out_window && "Out window cannot be NULL");
@@ -93,6 +94,60 @@ bool window_should_close(window_t *window) {
     return window->should_close;
 }
 
+static BOOL window_resizing(WPARAM w_param, LPARAM l_param) {
+    RECT *rect = (RECT *)l_param;
+
+    int width = rect->right - rect->left;
+    int height = rect->bottom - rect->top;
+
+    // TEMP: This needs to be changed to use the set window aspect ratio
+    float aspect_ratio = 1280.0f / 720.0f;
+
+    // Calculate new dimensions based on which edge is being dragged
+    switch (w_param) {
+        case WMSZ_LEFT:
+        case WMSZ_RIGHT:
+            // Width is changing, adjust height
+            height = (int)(width / aspect_ratio);
+            rect->bottom = rect->top + height;
+            break;
+
+        case WMSZ_TOP:
+        case WMSZ_BOTTOM:
+            // Height is changing, adjust width
+            width = (int)(height * aspect_ratio);
+            rect->right = rect->left + width;
+            break;
+
+        case WMSZ_TOPLEFT:
+        case WMSZ_TOPRIGHT:
+        case WMSZ_BOTTOMLEFT:
+        case WMSZ_BOTTOMRIGHT: {
+            // Dragging the corner -- pick the dimension that changed more
+            float width_ratio = width / (height * aspect_ratio);
+            if (width_ratio > 1.0f) {
+                // Width changed more, adjust height
+                height = width / aspect_ratio;
+                if (w_param == WMSZ_TOPLEFT || w_param == WMSZ_TOPRIGHT) {
+                    rect->top = rect->bottom - height;
+                } else {
+                    rect->bottom = rect->top + height;
+                }
+            } else {
+                // Height changed more, adjust width
+                width = height * aspect_ratio;
+                if (w_param == WMSZ_TOPLEFT || w_param == WMSZ_BOTTOMLEFT) {
+                    rect->left = rect->right - width;
+                } else {
+                    rect->right = rect->left + width;
+                }
+            }
+        } break;
+    }
+
+    return TRUE;
+}
+
 static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param) {
     // For now I'm passing in window struct so technically that is for creating multiple windows
     // and identifying them but I'm leaving it like this. Later, this could be streamlined if
@@ -108,9 +163,14 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
         }
 
         case WM_GETMINMAXINFO: {
-            MINMAXINFO *mmi = (MINMAXINFO*)l_param;
+            MINMAXINFO *mmi = (MINMAXINFO *)l_param;
             mmi->ptMinTrackSize.x = 500;
             mmi->ptMinTrackSize.y = 500;
+            return 0;
+        }
+
+        case WM_SIZING: {
+            window_resizing(w_param, l_param);
             return 0;
         }
 

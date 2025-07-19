@@ -171,7 +171,7 @@ void renderer_draw_ui(renderer_t *renderer, const struct ui_draw_list *draw_list
     float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
     // Binding states
-    context->lpVtbl->RSSetState(context, renderer->rasterizer_states[RASTER_2D_WIREFRAME]);
+    context->lpVtbl->RSSetState(context, renderer->rasterizer_states[RASTER_2D_DEFAULT]);
     context->lpVtbl->OMSetBlendState(context, renderer->blend_states[BLEND_ALPHA], NULL, 0xFFFFFFFF);
 
     // Clear and bind the render target (no depth needed)
