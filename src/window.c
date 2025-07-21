@@ -1,11 +1,14 @@
 #include "window.h"
 
 #include "logger.h"
+#include "input.h"
 
 #include <assert.h>
 #include <windows.h>
 
 #define DEFAULT_WIN_CLASS_NAME L"DefaultWinClassName"
+#define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
+#define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 
 static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param);
 static BOOL window_resizing(WPARAM w_param, LPARAM l_param);
@@ -159,6 +162,13 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
             CREATESTRUCTW *create_struct = (CREATESTRUCTW *)l_param;
             window_t *win = (window_t *)create_struct->lpCreateParams;
             SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)win);
+            return 0;
+        }
+
+        case WM_MOUSEMOVE: {
+            int32_t x = GET_X_LPARAM(l_param);
+            int32_t y = GET_Y_LPARAM(l_param);
+            input_process_mouse_move(x, y);
             return 0;
         }
 

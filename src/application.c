@@ -4,10 +4,12 @@
 #include "renderer.h"
 #include "ui.h"
 #include "window.h"
+#include "input.h"
 
 static renderer_t renderer;
 static window_t window;
 static ui_state_t ui;
+static input_state_t input;
 
 static bool application_initialize(void);
 static void application_terminate(void);
@@ -37,6 +39,12 @@ static bool application_initialize(void) {
     // Create the window (we'll probably only ever have one, unless...)
     if (!window_create("Chroma Scopes", 1280, 720, &window)) {
         LOG("Couldn't create window");
+        return false;
+    }
+
+    // Initialize Input System
+    if (!input_initialize(&input)) {
+        LOG("Failed to initialize input system");
         return false;
     }
 
@@ -164,6 +172,8 @@ static bool application_run(void) {
 
         renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);
+
+        input_swap_buffers(&input);
     }
 
     return true;

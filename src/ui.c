@@ -18,6 +18,9 @@ static float parse_spacing(ui_value_t spacing, float comparison_size);
 #define UI_HORIZONTAL true
 #define UI_VERTICAL false
 
+#define UI_FOREACH_CHILD(NODES, PARENT_IDX, CHILD_VAR) \
+    for (int CHILD_VAR = (NODES)[(PARENT_IDX)].first_child; CHILD_VAR != -1; CHILD_VAR = (NODES)[CHILD_VAR].next_sibling)
+
 bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height) {
     assert(state && "UI state must be a valid pointer");
 
