@@ -95,6 +95,9 @@ bool renderer_initialize(window_t *window, renderer_t *out_renderer) {
         return false;
     }
 
+    // Set primitive topology and forget
+    out_renderer->context->lpVtbl->IASetPrimitiveTopology(out_renderer->context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
     return true;
 }
 
@@ -124,9 +127,6 @@ void renderer_begin_frame(renderer_t *renderer) {
     context->lpVtbl->Unmap(context, (ID3D11Resource *)renderer->per_frame_buffer, 0);
 
     context->lpVtbl->VSSetConstantBuffers(context, 0, 1, &renderer->per_frame_buffer);
-
-    // TEMP:
-    renderer->context->lpVtbl->IASetPrimitiveTopology(renderer->context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
 void renderer_draw_scopes(renderer_t *renderer) {
@@ -164,6 +164,51 @@ void renderer_draw_scopes(renderer_t *renderer) {
         ID3D11UnorderedAccessView *nulluav = NULL;
         context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
     }
+
+    renderer_calculate_vectorscope(renderer, &renderer->blit_texture, &renderer->vectorscope_buckets);
+}
+
+void renderer_calculate_vectorscope(renderer_t *renderer, const texture_t *in_texture, texture_t *out_texture) {
+    ID3D11DeviceContext1 *context = renderer->context;
+    unsigned int clear_color[4] = {0, 0, 0, 0};
+
+    shader_pipeline_bind(context, &renderer->passes.vectorscope1);
+
+    context->lpVtbl->CSSetSamplers(context, 0, 1, &renderer->sampler_states[SAMPLER_LINEAR_CLAMP]);
+    context->lpVtbl->CSSetShaderResources(context, 0, 1, &in_texture->srv);
+
+    context->lpVtbl->ClearUnorderedAccessViewUint(context, out_texture->uav[0], clear_color);
+    context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &out_texture->uav[0], NULL);
+
+    {
+        uint32_t thread_groups[] = {16, 16, 1};
+        uint32_t dispatch_x = (out_texture->width + (thread_groups[0] - 1)) / thread_groups[0];
+        uint32_t dispatch_y = (out_texture->width + (thread_groups[1] - 1)) / thread_groups[1];
+        uint32_t dispatch_z = thread_groups[2];
+
+        context->lpVtbl->Dispatch(context, dispatch_x, dispatch_y, dispatch_z);
+    }
+
+    // Unbind UAV
+    ID3D11UnorderedAccessView *nulluav = NULL;
+    context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
+
+    shader_pipeline_bind(context, &renderer->passes.vectorscope_blur);
+    context->lpVtbl->CSSetShaderResources(context, 0, 1, &out_texture->srv);
+    context->lpVtbl->ClearUnorderedAccessViewUint(context, renderer->vectorscope_float.uav[0], clear_color);
+    context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &renderer->vectorscope_float.uav[0], NULL);
+
+    {
+        uint32_t thread_groups[] = {8, 8, 1};
+        uint32_t dispatch_x = (renderer->vectorscope_float.width + (thread_groups[0] - 1)) / thread_groups[0];
+        uint32_t dispatch_y = (renderer->vectorscope_float.width + (thread_groups[1] - 1)) / thread_groups[1];
+        uint32_t dispatch_z = thread_groups[2];
+
+        context->lpVtbl->Dispatch(context, dispatch_x, dispatch_y, dispatch_z);
+    }
+
+    // Unbind UAV
+    context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
 }
 
 void renderer_draw_ui(renderer_t *renderer, const struct ui_draw_list *draw_list) {
@@ -254,7 +299,7 @@ void renderer_draw_composite(renderer_t *renderer) {
 
         // Bind the SRVs
         ID3D11ShaderResourceView *srvs[] = {
-            renderer->vectorscope_texture.srv,
+            renderer->vectorscope_float.srv,
             renderer->ui_rt.srv,
         };
         context->lpVtbl->PSSetShaderResources(context, 0, ARRAYSIZE(srvs), srvs);
@@ -734,6 +779,39 @@ static bool create_textures(renderer_t *renderer) {
             LOG("Failed to create texture for vectorscope");
             return false;
         }
+
+        const texture_desc_t desc1 = {
+            .width = 1024,
+            .height = 1024,
+            .format = DXGI_FORMAT_R32_UINT,
+            .array_size = 1,
+            .bind_flags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+            .mip_levels = 1,
+            .msaa_samples = 1,
+            .generate_srv = true,
+        };
+
+        if (!texture_create(device, &desc1, &renderer->vectorscope_buckets)) {
+            LOG("Failed to create texture for vectorscope");
+            return false;
+        }
+
+        const texture_desc_t desc2 = {
+            .width = 1024,
+            .height = 1024,
+            .format = DXGI_FORMAT_R32_FLOAT,
+            .array_size = 1,
+            .bind_flags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+            .mip_levels = 1,
+            .msaa_samples = 1,
+            .generate_srv = true,
+        };
+
+        if (!texture_create(device, &desc2, &renderer->vectorscope_float)) {
+            LOG("Failed to create texture for vectorscope");
+            return false;
+        }
+
         LOG("Vectorscope texture created");
     }
 
@@ -807,6 +885,50 @@ static bool create_shader_pipelines(renderer_t *renderer) {
                 NULL,
                 0,
                 &renderer->passes.vectorscope)) {
+            LOG("Failed to create shader pipeline for Vectorscope Pass");
+            return false;
+        }
+
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/vectorscope1.cs.hlsl",
+                SHADER_STAGE_CS,
+                "main",
+                &renderer->shaders.vectorscope_cs1)) {
+            LOG("Failed to create compute shader for Vectorscope Pass");
+            return false;
+        }
+
+        shader_t *shaders1[] = {&renderer->shaders.vectorscope_cs1};
+        if (!shader_pipeline_create(
+                device,
+                shaders1,
+                ARRAYSIZE(shaders1),
+                NULL,
+                0,
+                &renderer->passes.vectorscope1)) {
+            LOG("Failed to create shader pipeline for Vectorscope Pass");
+            return false;
+        }
+
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/vectorscope_blur.cs.hlsl",
+                SHADER_STAGE_CS,
+                "main",
+                &renderer->shaders.vectorscope_blur_cs)) {
+            LOG("Failed to create compute shader for Vectorscope Pass");
+            return false;
+        }
+
+        shader_t *shaders2[] = {&renderer->shaders.vectorscope_blur_cs};
+        if (!shader_pipeline_create(
+                device,
+                shaders2,
+                ARRAYSIZE(shaders2),
+                NULL,
+                0,
+                &renderer->passes.vectorscope_blur)) {
             LOG("Failed to create shader pipeline for Vectorscope Pass");
             return false;
         }

@@ -46,12 +46,16 @@ struct shaders {
     shader_t fs_triangle_vs;
     shader_t unit_quad_vs;
     shader_t vectorscope_cs;
+    shader_t vectorscope_cs1;
+    shader_t vectorscope_blur_cs;
     shader_t composite_ps;
     shader_t ui_ps;
 };
 
 struct passes {
     shader_pipeline_t vectorscope;
+    shader_pipeline_t vectorscope1;
+    shader_pipeline_t vectorscope_blur;
     shader_pipeline_t composite;
     shader_pipeline_t ui;
 };
@@ -66,6 +70,8 @@ typedef struct renderer {
     capture_t capture;
     texture_t blit_texture;
     texture_t vectorscope_texture;
+    texture_t vectorscope_buckets;
+    texture_t vectorscope_float;
     texture_t ui_rt;
     texture_t default_white_px;
 
@@ -88,9 +94,14 @@ typedef struct renderer {
 bool renderer_initialize(struct window *window, renderer_t *out_renderer);
 void renderer_terminate(renderer_t *renderer);
 void renderer_begin_frame(renderer_t *renderer);
+void renderer_end_frame(renderer_t *renderer);
+
 void renderer_draw_scopes(renderer_t *renderer);
+void renderer_calculate_vectorscope(renderer_t *renderer, const texture_t* in_texture, texture_t *out_texture);
+void renderer_calculate_waveform(renderer_t *renderer, const texture_t *in_texture, texture_t *out_texture);
+void renderer_calculate_histogram(renderer_t *renderer, const texture_t *in_texture, texture_t *out_texture);
+
 void renderer_draw_ui(renderer_t *renderer, const struct ui_draw_list *draw_list);
 void renderer_draw_composite(renderer_t *renderer);
-void renderer_end_frame(renderer_t *renderer);
 
 void check_d3d11_debug_messages(ID3D11Device *device);

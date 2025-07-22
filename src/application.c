@@ -1,10 +1,14 @@
 #include "application.h"
 
+#include "input.h"
 #include "logger.h"
 #include "renderer.h"
 #include "ui.h"
 #include "window.h"
-#include "input.h"
+
+#define TARGET_FPS 60
+#define FIXED_TIMESTEP (1.0 / TARGET_FPS)
+#define MAX_FRAME_TIME 0.25 // 250ms max
 
 static renderer_t renderer;
 static window_t window;
