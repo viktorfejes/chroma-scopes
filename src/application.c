@@ -1,5 +1,6 @@
 #include "application.h"
 
+#include "macros.h"
 #include "input.h"
 #include "logger.h"
 #include "renderer.h"
@@ -64,83 +65,76 @@ static bool application_initialize(void) {
         return false;
     }
 
-    // TEST: Insert a new element
-    ui_element_t el = ui_create_element();
-    el.type = UI_ELEMENT_TYPE_FLEX;
-    el.flex_direction = UI_FLEX_DIRECTION_COL;
-    // el.flex_main_axis_alignment = UI_FLEX_ALIGN_SPACE_EVENLY;
-    // el.flex_cross_axis_alignment = UI_FLEX_ALIGN_CENTER;
-    el.width = UI_VALUE(100, UI_UNIT_PERCENT);
-    el.height = UI_VALUE(100, UI_UNIT_PERCENT);
-    el.base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 0.0f};
-    // el.background_image = &renderer.vectorscope_texture;
-    el.gap = (ui_gap_t){UI_VALUE(5, UI_UNIT_PIXEL), UI_VALUE(5, UI_UNIT_PIXEL)};
-    el.padding = (ui_spacing_t){
-        UI_VALUE(10, UI_UNIT_PIXEL),
-        UI_VALUE(10, UI_UNIT_PIXEL),
-        UI_VALUE(10, UI_UNIT_PIXEL),
-        UI_VALUE(10, UI_UNIT_PIXEL),
-    };
-    uint16_t body = ui_insert_element(&ui, &el, 0);
 
-    el.type = UI_ELEMENT_TYPE_BLOCK;
-    el.width = UI_VALUE(400, UI_UNIT_AUTO);
-    el.height = UI_VALUE(100, UI_UNIT_PIXEL);
-    el.base_style.background_color = (float4_t){0.5f, 0.5f, 0.0f, 1.0f};
-    ui_insert_element(&ui, &el, body);
+    uint16_t body, header, row1, row2, tl_comp, tr_comp, bl_comp, br_comp;
+    {
+        ui_element_t el = ui_create_element();
+        el.type = UI_ELEMENT_TYPE_FLEX;
+        el.flex_direction = UI_FLEX_DIRECTION_COL;
+        el.width = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){0.0f, 0.0f, 0.0f, 0.0f};
+        body = ui_insert_element(&ui, &el, 0);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.width = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.height = UI_VALUE(60, UI_UNIT_PIXEL);
+        el.base_style.background_color = (float4_t){0.16f, 0.16f, 0.16f, 1.0f};
+        header = ui_insert_element(&ui, &el, body);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.type = UI_ELEMENT_TYPE_FLEX;
+        el.flex_direction = UI_FLEX_DIRECTION_ROW;
+        el.flex_grow = 1;
+        el.width = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){1.0f, 0.0f, 0.0f, 0.0f};
+        row1 = ui_insert_element(&ui, &el, body);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.type = UI_ELEMENT_TYPE_FLEX;
+        el.flex_direction = UI_FLEX_DIRECTION_ROW;
+        el.flex_grow = 1;
+        el.width = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){0.0f, 0.0f, 0.0f, 0.0f};
+        row2 = ui_insert_element(&ui, &el, body);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.flex_grow = 1;
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){1.0f, 0.0f, 0.0f, 0.1f};
+        tl_comp = ui_insert_element(&ui, &el, row1);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.flex_grow = 1;
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){0.0f, 1.0f, 0.0f, 0.1f};
+        tr_comp = ui_insert_element(&ui, &el, row1);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.flex_grow = 1;
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){0.0f, 0.0f, 1.0f, 0.1f};
+        bl_comp = ui_insert_element(&ui, &el, row2);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.flex_grow = 1;
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){1.0f, 1.0f, 0.0f, 0.1f};
+        br_comp = ui_insert_element(&ui, &el, row2);
+    }
 
-    el.type = UI_ELEMENT_TYPE_FLEX;
-    el.width = UI_VALUE(100, UI_UNIT_PERCENT);
-    el.height = UI_VALUE(100, UI_UNIT_AUTO);
-    el.flex_direction = UI_FLEX_DIRECTION_ROW;
-    el.flex_grow = 1;
-    el.base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f};
-    el.gap = (ui_gap_t){UI_VALUE(5, UI_UNIT_PIXEL), UI_VALUE(5, UI_UNIT_PIXEL)};
-    el.padding = (ui_spacing_t){
-        UI_VALUE(10, UI_UNIT_PIXEL),
-        UI_VALUE(10, UI_UNIT_PIXEL),
-        UI_VALUE(10, UI_UNIT_PIXEL),
-        UI_VALUE(10, UI_UNIT_PIXEL),
-    };
-    uint16_t main = ui_insert_element(&ui, &el, body);
-
-    el.type = UI_ELEMENT_TYPE_BLOCK;
-    el.width = UI_VALUE(400, UI_UNIT_AUTO);
-    el.height = UI_VALUE(100, UI_UNIT_PERCENT);
-    el.flex_grow = 1;
-    el.base_style.background_color = (float4_t){1.0f, 0.0f, 1.0f, 1.0f};
-    ui_insert_element(&ui, &el, main);
-
-    el.type = UI_ELEMENT_TYPE_FLEX;
-    el.flex_direction = UI_FLEX_DIRECTION_COL;
-    el.flex_main_axis_alignment = UI_FLEX_ALIGN_SPACE_BETWEEN;
-    el.flex_cross_axis_alignment = UI_FLEX_ALIGN_STRETCH;
-    el.width = UI_VALUE(400, UI_UNIT_PIXEL);
-    el.height = UI_VALUE(100, UI_UNIT_PERCENT);
-    el.flex_grow = 0;
-    el.base_style.background_color = (float4_t){0.0f, 1.0f, 0.0f, 1.0f};
-    uint16_t left = ui_insert_element(&ui, &el, main);
-
-    el.type = UI_ELEMENT_TYPE_BLOCK;
-    el.width = UI_VALUE(100, UI_UNIT_PERCENT);
-    el.height = UI_VALUE(100, UI_UNIT_AUTO);
-    el.flex_grow = 1;
-    el.base_style.background_color = (float4_t){1.0f, 1.0f, 0.0f, 1.0f};
-    ui_insert_element(&ui, &el, left);
-
-    el.type = UI_ELEMENT_TYPE_BLOCK;
-    el.width = UI_VALUE(200, UI_UNIT_PIXEL);
-    el.height = UI_VALUE(100, UI_UNIT_AUTO);
-    el.flex_grow = 1;
-    el.base_style.background_color = (float4_t){1.0f, 0.0f, 0.0f, 1.0f};
-    ui_insert_element(&ui, &el, left);
-
-    el.type = UI_ELEMENT_TYPE_BLOCK;
-    el.width = UI_VALUE(200, UI_UNIT_PIXEL);
-    el.height = UI_VALUE(100, UI_UNIT_AUTO);
-    el.flex_grow = 1;
-    el.base_style.background_color = (float4_t){0.0f, 0.0f, 1.0f, 1.0f};
-    ui_insert_element(&ui, &el, left);
+    UNUSED(header);
+    UNUSED(tl_comp);
+    UNUSED(tr_comp);
+    UNUSED(bl_comp);
+    UNUSED(br_comp);
 
     ui_layout_measure(&ui, &ui.elements[0], 0.0f, (float)window.width, 0.0f, (float)window.height);
     ui_layout_position(&ui, &ui.elements[0], 0.0f, 0.0f);

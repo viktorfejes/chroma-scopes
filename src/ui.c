@@ -88,9 +88,11 @@ uint16_t ui_insert_element(ui_state_t *state, ui_element_t *element, uint16_t pa
     uint16_t id = el->id;
     *el = *element;
     el->id = id;
-    el->parent_id = parent_id;
 
     // Set up appropriate relationship
+    el->parent_id = parent_id;
+    el->next_sibling_id = -1;
+
     ui_element_t *parent = &state->elements[parent_id];
     if (!parent || parent->id == ((uint16_t)-1)) {
         LOG("Invalid parent id!");
@@ -98,9 +100,15 @@ uint16_t ui_insert_element(ui_state_t *state, ui_element_t *element, uint16_t pa
         return ((uint16_t)-1);
     }
 
-    // Link with children/siblings
-    el->next_sibling_id = parent->first_child_id;
-    parent->first_child_id = el->id;
+    if (parent->first_child_id == -1) {
+        parent->first_child_id = el->id;
+    } else {
+        int32_t curr_idx = parent->first_child_id;
+        while (state->elements[curr_idx].next_sibling_id != -1) {
+            curr_idx = state->elements[curr_idx].next_sibling_id;
+        }
+        state->elements[curr_idx].next_sibling_id = el->id;
+    }
 
     return el->id;
 }

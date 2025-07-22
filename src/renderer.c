@@ -812,6 +812,22 @@ static bool create_textures(renderer_t *renderer) {
             return false;
         }
 
+        const texture_desc_t out_desc = {
+            .width = 1024,
+            .height = 576,
+            .format = DXGI_FORMAT_R8G8B8A8_UNORM,
+            .array_size = 1,
+            .bind_flags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
+            .mip_levels = 1,
+            .msaa_samples = 1,
+            .generate_srv = true,
+        };
+
+        if (!texture_create(device, &out_desc, &renderer->vectorscope_out)) {
+            LOG("Failed to create texture for vectorscope");
+            return false;
+        }
+
         LOG("Vectorscope texture created");
     }
 

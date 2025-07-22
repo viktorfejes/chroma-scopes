@@ -72,6 +72,7 @@ typedef struct renderer {
     texture_t vectorscope_texture;
     texture_t vectorscope_buckets;
     texture_t vectorscope_float;
+    texture_t vectorscope_out;
     texture_t ui_rt;
     texture_t default_white_px;
 
