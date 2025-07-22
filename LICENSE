@@ -1,0 +1,31 @@
+END-USER LICENSE AGREEMENT (EULA)
+
+Copyright (c) 2025 Viktor Fejes
+
+This software (the "Software") is provided in source code form and may be used, modified, and compiled by individuals for personal, non-commercial purposes.
+
+By using this Software, you agree to the following terms:
+
+1. Usage
+You are granted a non-exclusive, non-transferable license to download, compile, and use the Software solely for personal or educational purposes.
+
+2. Restrictions
+- You may not distribute compiled versions (binaries) of the Software.
+- You may not sell, license, sublicense, or otherwise commercialize the Software or derivatives of it.
+- You may not rent, lease, or lend the Software.
+- You may not remove or alter copyright notices.
+
+3. Source Code Modification
+You may modify the source code for personal use or to contribute back to the official project. All modifications must retain this license notice.
+
+4. No Warranty
+The Software is provided "as-is", without any warranties of any kind, express or implied. Use at your own risk.
+
+5. Third-party Software
+This project uses third-party libraries under their own licenses. See THIRD_PARTY_LICENSES.txt for details.
+
+6. Commercial Use
+For commercial licensing, contact the author directly at: viktor@viktorfejes.com
+
+All rights not expressly granted are reserved.
+
