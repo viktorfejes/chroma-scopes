@@ -10,7 +10,7 @@ static const int CENTER = WIDTH / 2;
 static const float3 RGB_to_Cb = float3(-0.1146, -0.3854, 0.5);
 static const float3 RGB_to_Cr = float3(0.5, -0.4542, -0.0458);
 
-[numthreads(16, 16, 1)]
+[numthreads(8, 8, 1)]
 void main(uint3 DTid: SV_DispatchThreadID) {
     uint2 dim;
     input_tex.GetDimensions(dim.x, dim.y);
@@ -24,11 +24,10 @@ void main(uint3 DTid: SV_DispatchThreadID) {
     float Cb = dot(rgb, RGB_to_Cb);
     float Cr = dot(rgb, RGB_to_Cr);
 
-    int x = int((Cb + 0.5f) * WIDTH);
-    int y = int((1.0f - (Cr + 0.5f)) * HEIGHT);
+    int x = int((Cb + 0.5) * WIDTH);
+    int y = int((Cr + 0.5) * HEIGHT);
 
     if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
         InterlockedAdd(output_tex[int2(x, y)], 1);
     }
 }
-

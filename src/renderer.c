@@ -881,71 +881,71 @@ static bool create_shader_pipelines(renderer_t *renderer) {
         }
     }
 
-    // Create shader pipeline for vectorscope pass
+    // Create shader pipelines for vectorscope
     {
         if (!shader_create_from_file(
                 device,
-                "assets/shaders/vectorscope.cs.hlsl",
+                "assets/shaders/vs_accum.cs.hlsl",
                 SHADER_STAGE_CS,
                 "main",
-                &renderer->shaders.vectorscope_cs)) {
-            LOG("Failed to create compute shader for Vectorscope Pass");
+                &renderer->shaders.vs_accum_cs)) {
+            LOG("Failed to create compute shader for Vectorscope Accumulation Pass");
             return false;
         }
 
-        shader_t *shaders[] = {&renderer->shaders.vectorscope_cs};
+        shader_t *shaders[] = {&renderer->shaders.vs_accum_cs};
         if (!shader_pipeline_create(
                 device,
                 shaders,
                 ARRAYSIZE(shaders),
                 NULL,
                 0,
-                &renderer->passes.vectorscope)) {
-            LOG("Failed to create shader pipeline for Vectorscope Pass");
+                &renderer->passes.vs_accum)) {
+            LOG("Failed to create shader pipeline for Vectorscope Accumulation Pass");
             return false;
         }
 
         if (!shader_create_from_file(
                 device,
-                "assets/shaders/vectorscope1.cs.hlsl",
+                "assets/shaders/vs_blur.cs.hlsl",
                 SHADER_STAGE_CS,
                 "main",
-                &renderer->shaders.vectorscope_cs1)) {
-            LOG("Failed to create compute shader for Vectorscope Pass");
+                &renderer->shaders.vs_blur_cs)) {
+            LOG("Failed to create compute shader for Vectorscope Blur Pass");
             return false;
         }
 
-        shader_t *shaders1[] = {&renderer->shaders.vectorscope_cs1};
+        shader_t *shaders1[] = {&renderer->shaders.vs_blur_cs};
         if (!shader_pipeline_create(
                 device,
                 shaders1,
                 ARRAYSIZE(shaders1),
                 NULL,
                 0,
-                &renderer->passes.vectorscope1)) {
-            LOG("Failed to create shader pipeline for Vectorscope Pass");
+                &renderer->passes.vs_blur)) {
+            LOG("Failed to create shader pipeline for Vectorscope Blur Pass");
             return false;
         }
 
         if (!shader_create_from_file(
                 device,
-                "assets/shaders/vectorscope_blur.cs.hlsl",
+                "assets/shaders/vs_comp.cs.hlsl",
                 SHADER_STAGE_CS,
                 "main",
-                &renderer->shaders.vectorscope_blur_cs)) {
-            LOG("Failed to create compute shader for Vectorscope Pass");
+                &renderer->shaders.vs_comp_cs)) {
+            LOG("Failed to create compute shader for Vectorscope Composite Pass");
             return false;
         }
 
-        shader_t *shaders2[] = {&renderer->shaders.vectorscope_blur_cs};
+        shader_t *shaders2[] = {&renderer->shaders.vs_comp_cs};
         if (!shader_pipeline_create(
                 device,
                 shaders2,
                 ARRAYSIZE(shaders2),
                 NULL,
                 0,
-                &renderer->passes.vectorscope_blur)) {
-            LOG("Failed to create shader pipeline for Vectorscope Pass");
+                &renderer->passes.vs_comp)) {
+            LOG("Failed to create shader pipeline for Vectorscope Composite Pass");
             return false;
         }
     }

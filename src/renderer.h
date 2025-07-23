@@ -3,6 +3,7 @@
 #include "capture.h"
 #include "shader.h"
 #include "texture.h"
+#include "vectorscope.h"
 
 #include <stdbool.h>
 
@@ -50,9 +51,17 @@ struct shaders {
     shader_t vectorscope_blur_cs;
     shader_t composite_ps;
     shader_t ui_ps;
+
+    shader_t vs_accum_cs;
+    shader_t vs_blur_cs;
+    shader_t vs_comp_cs;
 };
 
 struct passes {
+    shader_pipeline_t vs_accum;
+    shader_pipeline_t vs_blur;
+    shader_pipeline_t vs_comp;
+
     shader_pipeline_t vectorscope;
     shader_pipeline_t vectorscope1;
     shader_pipeline_t vectorscope_blur;
@@ -80,6 +89,9 @@ typedef struct renderer {
     ID3D11RasterizerState *rasterizer_states[RASTER_STATE_COUNT];
     ID3D11BlendState *blend_states[BLEND_STATE_COUNT];
     ID3D11SamplerState *sampler_states[SAMPLER_STATE_COUNT];
+
+    // Scope modules
+    vectorscope_t vectorscope;
 
     // Shaders and pipelines
     struct shaders shaders;

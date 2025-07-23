@@ -9,7 +9,7 @@ void main(uint3 dtid: SV_DispatchThreadID) {
     int2 coord = int2(dtid.xy);
     if (coord.x >= TEXSIZE || coord.y >= TEXSIZE) return;
 
-    float result = 0.0f;
+    float result = 0.0;
     int count = 0;
 
     [unroll]

@@ -1,5 +1,6 @@
 #include "application.h"
 
+#include "vectorscope.h"
 #include "macros.h"
 #include "input.h"
 #include "logger.h"
@@ -15,6 +16,17 @@ static renderer_t renderer;
 static window_t window;
 static ui_state_t ui;
 static input_state_t input;
+
+// TODO: implement
+typedef struct app_state {
+    /* System states */
+    renderer_t *renderer;
+    window_t *window;
+    ui_state_t *ui;
+    input_state_t *input;
+
+    /* Game loop fields */
+} app_state_t;
 
 static bool application_initialize(void);
 static void application_terminate(void);
@@ -65,12 +77,23 @@ static bool application_initialize(void) {
         return false;
     }
 
+    if (!vectorscope_setup(&renderer.vectorscope, &renderer)) {
+        LOG("Failed to setup vectorscope");
+        return false;
+    }
+
+    // Get the vectorscope texture
+    texture_t *vs_tex = vectorscope_get_texture(&renderer.vectorscope);
 
     uint16_t body, header, row1, row2, tl_comp, tr_comp, bl_comp, br_comp;
     {
         ui_element_t el = ui_create_element();
         el.type = UI_ELEMENT_TYPE_FLEX;
         el.flex_direction = UI_FLEX_DIRECTION_COL;
+        el.gap = (ui_gap_t){
+            .x = UI_VALUE(3, UI_UNIT_PIXEL),
+            .y = UI_VALUE(3, UI_UNIT_PIXEL),
+        },
         el.width = UI_VALUE(100, UI_UNIT_PERCENT);
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){0.0f, 0.0f, 0.0f, 0.0f};
@@ -105,7 +128,8 @@ static bool application_initialize(void) {
         ui_element_t el = ui_create_element();
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
-        el.base_style.background_color = (float4_t){1.0f, 0.0f, 0.0f, 0.1f};
+        el.base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f};
+        el.base_style.background_image = vs_tex;
         tl_comp = ui_insert_element(&ui, &el, row1);
     }
     {
@@ -119,7 +143,8 @@ static bool application_initialize(void) {
         ui_element_t el = ui_create_element();
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
-        el.base_style.background_color = (float4_t){0.0f, 0.0f, 1.0f, 0.1f};
+        el.base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f};
+        el.base_style.background_image = &renderer.blit_texture;
         bl_comp = ui_insert_element(&ui, &el, row2);
     }
     {
@@ -153,6 +178,7 @@ static void application_terminate(void) {
 }
 
 static void application_update(void) {
+    capture_frame(&renderer.capture, (rect_t){0, 0, 500, 500}, renderer.context, &renderer.blit_texture);
 }
 
 static bool application_run(void) {
@@ -164,11 +190,9 @@ static bool application_run(void) {
         application_update();
 
         renderer_begin_frame(&renderer);
-        renderer_draw_scopes(&renderer);
-
-        renderer_draw_ui(&renderer, &ui.draw_list);
-
-        renderer_draw_composite(&renderer);
+            vectorscope_render(&renderer.vectorscope, &renderer, &renderer.blit_texture);
+            renderer_draw_ui(&renderer, &ui.draw_list);
+            renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);
 
         input_swap_buffers(&input);
