@@ -4,6 +4,7 @@
 #include "shader.h"
 #include "texture.h"
 #include "vectorscope.h"
+#include "waveform.h"
 
 #include <stdbool.h>
 
@@ -55,12 +56,18 @@ struct shaders {
     shader_t vs_accum_cs;
     shader_t vs_blur_cs;
     shader_t vs_comp_cs;
+
+    shader_t wf_accum_cs;
+    shader_t wf_comp_cs;
 };
 
 struct passes {
     shader_pipeline_t vs_accum;
     shader_pipeline_t vs_blur;
     shader_pipeline_t vs_comp;
+
+    shader_pipeline_t wf_accum;
+    shader_pipeline_t wf_comp;
 
     shader_pipeline_t vectorscope;
     shader_pipeline_t vectorscope1;
@@ -92,6 +99,7 @@ typedef struct renderer {
 
     // Scope modules
     vectorscope_t vectorscope;
+    waveform_t waveform;
 
     // Shaders and pipelines
     struct shaders shaders;

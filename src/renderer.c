@@ -95,6 +95,18 @@ bool renderer_initialize(window_t *window, renderer_t *out_renderer) {
         return false;
     }
 
+    // Setup vectorscope
+    if (!vectorscope_setup(&out_renderer->vectorscope, out_renderer)) {
+        LOG("Failed to setup vectorscope");
+        return false;
+    }
+
+    // Setup waveform and parade
+    if (!waveform_setup(&out_renderer->waveform, out_renderer)) {
+        LOG("Failed to setup waveform");
+        return false;
+    }
+
     // Set primitive topology and forget
     out_renderer->context->lpVtbl->IASetPrimitiveTopology(out_renderer->context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -946,6 +958,53 @@ static bool create_shader_pipelines(renderer_t *renderer) {
                 0,
                 &renderer->passes.vs_comp)) {
             LOG("Failed to create shader pipeline for Vectorscope Composite Pass");
+            return false;
+        }
+    }
+
+    // Create shader pipelines for waveform and parade
+    {
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/wf_accum.cs.hlsl",
+                SHADER_STAGE_CS,
+                "main",
+                &renderer->shaders.wf_accum_cs)) {
+            LOG("Failed to create compute shader for Waveform Accumulation Pass");
+            return false;
+        }
+
+        shader_t *shaders[] = {&renderer->shaders.wf_accum_cs};
+        if (!shader_pipeline_create(
+                device,
+                shaders,
+                ARRAYSIZE(shaders),
+                NULL,
+                0,
+                &renderer->passes.wf_accum)) {
+            LOG("Failed to create shader pipeline for Waveform Accumulation Pass");
+            return false;
+        }
+
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/wf_comp.cs.hlsl",
+                SHADER_STAGE_CS,
+                "main",
+                &renderer->shaders.wf_comp_cs)) {
+            LOG("Failed to create compute shader for Waveform Composite Pass");
+            return false;
+        }
+
+        shader_t *shaders2[] = {&renderer->shaders.wf_comp_cs};
+        if (!shader_pipeline_create(
+                device,
+                shaders2,
+                ARRAYSIZE(shaders2),
+                NULL,
+                0,
+                &renderer->passes.wf_comp)) {
+            LOG("Failed to create shader pipeline for Waveform Composite Pass");
             return false;
         }
     }

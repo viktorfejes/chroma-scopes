@@ -77,13 +77,9 @@ static bool application_initialize(void) {
         return false;
     }
 
-    if (!vectorscope_setup(&renderer.vectorscope, &renderer)) {
-        LOG("Failed to setup vectorscope");
-        return false;
-    }
-
     // Get the vectorscope texture
     texture_t *vs_tex = vectorscope_get_texture(&renderer.vectorscope);
+    texture_t *wf_tex = waveform_get_texture(&renderer.waveform);
 
     uint16_t body, header, row1, row2, tl_comp, tr_comp, bl_comp, br_comp;
     {
@@ -136,7 +132,8 @@ static bool application_initialize(void) {
         ui_element_t el = ui_create_element();
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
-        el.base_style.background_color = (float4_t){0.0f, 1.0f, 0.0f, 0.1f};
+        el.base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f};
+        el.base_style.background_image = wf_tex;
         tr_comp = ui_insert_element(&ui, &el, row1);
     }
     {
@@ -191,6 +188,7 @@ static bool application_run(void) {
 
         renderer_begin_frame(&renderer);
             vectorscope_render(&renderer.vectorscope, &renderer, &renderer.blit_texture);
+            waveform_render(&renderer.waveform, &renderer, &renderer.blit_texture);
             renderer_draw_ui(&renderer, &ui.draw_list);
             renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);
