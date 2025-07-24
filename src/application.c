@@ -91,8 +91,8 @@ static bool application_initialize(void) {
         el.type = UI_ELEMENT_TYPE_FLEX;
         el.flex_direction = UI_FLEX_DIRECTION_COL;
         el.gap = (ui_gap_t){
-            .x = UI_VALUE(3, UI_UNIT_PIXEL),
-            .y = UI_VALUE(3, UI_UNIT_PIXEL),
+            .x = UI_VALUE(2, UI_UNIT_PIXEL),
+            .y = UI_VALUE(2, UI_UNIT_PIXEL),
         },
         el.width = UI_VALUE(100, UI_UNIT_PERCENT);
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);

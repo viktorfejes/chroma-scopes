@@ -106,8 +106,8 @@ void vectorscope_render(vectorscope_t *vs, struct renderer *renderer, texture_t 
     context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &vs->accum_tex.uav[0], NULL);
     context->lpVtbl->Dispatch(
         context,
-        (vs->accum_tex.width + (thread_groups[0] - 1)) / thread_groups[0],
-        (vs->accum_tex.width + (thread_groups[1] - 1)) / thread_groups[1],
+        (capture_texture->width + (thread_groups[0] - 1)) / thread_groups[0],
+        (capture_texture->width + (thread_groups[1] - 1)) / thread_groups[1],
         thread_groups[2]);
     context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
 

@@ -1,4 +1,21 @@
 Texture2D<float4> input_tex : register(t0);
+RWTexture2D<uint4> output_tex : register(u0);
+
+static const uint buckets = 512;
+
+[numthreads(8, 8, 1)]
+void main(uint3 DTid: SV_DispatchThreadID) {
+    uint2 out_res;
+    output_tex.GetDimensions(out_res.x, out_res.y);
+
+    if (DTid.x >= out_res.x || DTid.y >= out_res.y) return;
+
+    for (uint i = 0; i <= buckets; ++i) {
+
+    }
+}
+
+Texture2D<float4> input_tex : register(t0);
 RWTexture2D<float4> output_tex : register(u0);
 
 static const float MAX_VALUE = 270.0;
