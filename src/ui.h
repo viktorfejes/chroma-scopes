@@ -5,6 +5,9 @@
 #include <stdint.h>
 
 struct texture;
+struct ui_element;
+
+typedef bool (*mouse_event_fn)(struct ui_element *el);
 
 typedef enum ui_element_type {
     UI_ELEMENT_TYPE_BLOCK = 0,
@@ -66,7 +69,12 @@ typedef struct ui_element {
     /* Relationships */
     int16_t parent_id;
     int16_t first_child_id;
+    int16_t last_child_id;
     int16_t next_sibling_id;
+    int16_t prev_sibling_id;
+
+    /* Function pointer for mouse events */
+    mouse_event_fn handle_mouse;
 
     /* Type of the UI element. Equivalent to CSS `display` */
     ui_element_type_t type;
@@ -124,3 +132,4 @@ void ui_remove_element(ui_state_t *state, uint16_t id);
 void ui_layout_measure(ui_state_t *state, ui_element_t *element, uint16_t min_width, uint16_t max_width, uint16_t min_height, uint16_t max_height);
 void ui_layout_position(ui_state_t *state, ui_element_t *element, float origin_x, float origin_y);
 void ui_draw(ui_state_t *state, ui_element_t *root);
+bool ui_handle_mouse_event(ui_state_t *state, ui_element_t *element);

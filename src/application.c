@@ -50,6 +50,15 @@ error:
     application_terminate();
 }
 
+static bool test_ui_events(ui_element_t *el) {
+    if (input_is_mouse_button_pressed(MOUSE_BUTTON_LEFT)) {
+        LOG("The vectorscope and only the vectorscope was clicked! (%d)", el->id);
+        return true;
+    }
+
+    return false;
+}
+
 static bool application_initialize(void) {
     LOG("Application is initializing");
 
@@ -140,6 +149,7 @@ static bool application_initialize(void) {
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f};
         el.base_style.background_image = vs_tex;
+        el.handle_mouse = test_ui_events;
         tl_comp = ui_insert_element(&ui, &el, row1);
     }
     {
@@ -214,6 +224,7 @@ static bool application_run(void) {
         accumulator += elapsed;
 
         while (accumulator >= FIXED_TIMESTEP) {
+            ui_handle_mouse_event(&ui, &ui.elements[0]);
             application_update(FIXED_TIMESTEP);
             input_swap_buffers(&input);
 

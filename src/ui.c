@@ -2,6 +2,7 @@
 
 #include "logger.h"
 #include "macros.h"
+#include "input.h"
 
 #include <assert.h>
 #include <string.h>
@@ -31,7 +32,9 @@ bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height)
         el->id = ((uint16_t)-1);
         el->parent_id = -1;
         el->first_child_id = -1;
+        el->last_child_id = -1;
         el->next_sibling_id = -1;
+        el->prev_sibling_id = -1;
     }
 
     // Make sure draw list count is 0
@@ -55,7 +58,9 @@ ui_element_t ui_create_element(void) {
         .id = ((uint16_t)-1),
         .parent_id = -1,
         .first_child_id = -1,
+        .last_child_id = -1,
         .next_sibling_id = -1,
+        .prev_sibling_id = -1,
         .base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f},
     };
 
@@ -92,6 +97,7 @@ uint16_t ui_insert_element(ui_state_t *state, ui_element_t *element, uint16_t pa
     // Set up appropriate relationship
     el->parent_id = parent_id;
     el->next_sibling_id = -1;
+    el->prev_sibling_id = -1;
 
     ui_element_t *parent = &state->elements[parent_id];
     if (!parent || parent->id == ((uint16_t)-1)) {
@@ -101,13 +107,15 @@ uint16_t ui_insert_element(ui_state_t *state, ui_element_t *element, uint16_t pa
     }
 
     if (parent->first_child_id == -1) {
+        // First and only child
         parent->first_child_id = el->id;
+        parent->last_child_id = el->id;
     } else {
-        int32_t curr_idx = parent->first_child_id;
-        while (state->elements[curr_idx].next_sibling_id != -1) {
-            curr_idx = state->elements[curr_idx].next_sibling_id;
-        }
-        state->elements[curr_idx].next_sibling_id = el->id;
+        // Append to end of sibling list
+        ui_element_t *last = &state->elements[parent->last_child_id];
+        last->next_sibling_id = el->id;
+        el->prev_sibling_id = last->id;
+        parent->last_child_id = el->id;
     }
 
     return el->id;
@@ -118,36 +126,50 @@ void ui_remove_element(ui_state_t *state, uint16_t id) {
     assert(id < UI_MAX_ELEMENTS && "ID must be valid for removal");
 
     ui_element_t *el = &state->elements[id];
-    if (el && el->id != ((uint16_t)-1) && el->parent_id <= 0) {
-        // Remove from relationship
-        ui_element_t *parent = &state->elements[el->parent_id];
-        if (!parent) {
-            LOG("Couldn't find parent for element to be removed");
-            return;
-        }
-
-        // If the parent's first child is this element just remove it from there and replace with sibling
-        if (parent->first_child_id == el->id) {
-            parent->first_child_id = el->next_sibling_id;
-        } else {
-            // Otherwise, we need to walk and find
-            ui_element_t *current_sibling = &state->elements[parent->first_child_id];
-            ui_element_t *prev_sibling = current_sibling;
-            while (true) {
-                if (current_sibling == el) {
-                    prev_sibling->next_sibling_id = el->next_sibling_id;
-                    break;
-                }
-
-                prev_sibling = current_sibling;
-                current_sibling = &state->elements[current_sibling->next_sibling_id];
-            }
-        }
-
-        // Invalidate slot's id
-        el->id = ((uint16_t)-1);
-        LOG("Element removed from the layout tree");
+    if (!el || el->id == ((uint16_t)-1)) {
+        LOG("Element already invalid");
+        return;
     }
+
+    int16_t parent_id = el->parent_id;
+    if (parent_id != -1) {
+        ui_element_t *parent = &state->elements[parent_id];
+        if (parent && parent->id != ((uint16_t)-1)) {
+            // Unlink from siblings
+            if (el->prev_sibling_id != -1) {
+                state->elements[el->prev_sibling_id].next_sibling_id = el->next_sibling_id;
+            } else {
+                // el was first child
+                parent->first_child_id = el->next_sibling_id;
+            }
+
+            if (el->next_sibling_id != -1) {
+                state->elements[el->next_sibling_id].prev_sibling_id = el->prev_sibling_id;
+            } else {
+                // el was last child
+                parent->last_child_id = el->prev_sibling_id;
+            }
+        } else {
+            LOG("Couldn't find valid parent for element");
+        }
+    }
+
+    // Recursively remove all children
+    int16_t child = el->first_child_id;
+    while (child != -1) {
+        int16_t next = state->elements[child].next_sibling_id;
+        ui_remove_element(state, child);
+        child = next;
+    }
+
+    // Invalidate and clear the element
+    *el = (ui_element_t){0};
+    el->id = (uint16_t)-1;
+    el->parent_id = -1;
+    el->next_sibling_id = -1;
+    el->prev_sibling_id = -1;
+
+    LOG("Element removed from layout tree");
 }
 
 void ui_layout_measure(ui_state_t *state, ui_element_t *element, uint16_t min_width, uint16_t max_width, uint16_t min_height, uint16_t max_height) {
@@ -239,6 +261,28 @@ void ui_draw(ui_state_t *state, ui_element_t *root) {
         ui_draw(state, child);
         child_idx = child->next_sibling_id;
     }
+}
+
+bool ui_handle_mouse_event(ui_state_t *state, ui_element_t *element) {
+    // Check bounds
+    int2_t mouse_pos = input_mouse_get_pos();
+    if (!rect_contains(element->computed.layout, (float2_t){mouse_pos.x, mouse_pos.y})) {
+        return false;
+    }
+
+    // Process children first (front-to-back)
+    for (int16_t child = element->last_child_id; child != -1; child = state->elements[child].prev_sibling_id) {
+        if (ui_handle_mouse_event(state, &state->elements[child])) {
+            return true;    // Child consumed it, we are done!
+        }
+    }
+
+    // No child handled it, try current element
+    if (element->handle_mouse) {
+        return element->handle_mouse(element);
+    }
+
+    return false;
 }
 
 static void draw_element(ui_state_t *state, ui_element_t *root) {
@@ -466,3 +510,4 @@ static float parse_spacing_axis(ui_spacing_t spacing, float comparison_value, bo
     float s2 = parse_spacing(horizontal ? spacing.right : spacing.bottom, comparison_value);
     return s1 + s2;
 }
+

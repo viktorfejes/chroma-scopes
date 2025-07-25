@@ -1,5 +1,7 @@
 #pragma once
 
+#include "math.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -66,6 +68,14 @@ bool input_was_key_up(keycode_t key_code);
 bool input_is_key_pressed(keycode_t key_code);
 bool input_is_key_released(keycode_t key_code);
 
+bool input_is_mouse_button_down(mousebutton_t button);
+bool input_is_mouse_button_up(mousebutton_t button);
+bool input_was_mouse_button_down(mousebutton_t button);
+bool input_was_mouse_button_up(mousebutton_t button);
+bool input_is_mouse_button_pressed(mousebutton_t button);
+bool input_is_mouse_button_released(mousebutton_t button);
+
+int2_t input_mouse_get_pos(void); 
 int16_t input_mouse_get_x(void);
 int16_t input_mouse_get_y(void);
 int16_t input_mouse_get_delta_x(void);

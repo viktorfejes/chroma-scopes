@@ -263,6 +263,38 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
             return 0;
         }
 
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP: {
+            bool pressed = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN;
+            if (pressed)  SetCapture(hwnd); else ReleaseCapture();
+            mousebutton_t mb = MOUSE_BUTTON_COUNT;
+
+            switch (msg) {
+                case WM_LBUTTONDOWN:
+                case WM_LBUTTONUP:
+                    mb = MOUSE_BUTTON_LEFT;
+                    break;
+                case WM_RBUTTONDOWN:
+                case WM_RBUTTONUP:
+                    mb = MOUSE_BUTTON_RIGHT;
+                    break;
+                case WM_MBUTTONDOWN:
+                case WM_MBUTTONUP:
+                    mb = MOUSE_BUTTON_MIDDLE;
+                    break;
+            }
+            
+            if (mb < MOUSE_BUTTON_COUNT) {
+                input_process_mouse_button(mb, pressed);
+            }
+
+            return 0;
+        };
+
         case WM_KEYDOWN: {
             input_process_key(vk_to_keycode(w_param), true);
             return 0;

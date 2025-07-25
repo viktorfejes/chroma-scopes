@@ -1,5 +1,12 @@
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
+
+typedef struct int2 {
+    int32_t x, y;
+} int2_t;
+
 typedef struct float2 {
     float x, y;
 } float2_t;
@@ -29,5 +36,6 @@ float4x4_t mat_orthographic_lh(float view_width, float view_height, float near_z
 /* @brief Generic offcenter, optimized orthographic matrix projection. Left-handed*/
 float4x4_t mat_orthographic_offcenter_lh(float left, float right, float bottom, float top, float near_z, float far_z);
 
+bool rect_contains(rect_t rect, float2_t point);
 float2_t rect_to_position(rect_t rect);
 float2_t rect_to_size(rect_t rect);

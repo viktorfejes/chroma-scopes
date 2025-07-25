@@ -42,6 +42,13 @@ float4x4_t mat_orthographic_offcenter_lh(float left, float right, float bottom, 
     return m;
 }
 
+bool rect_contains(rect_t rect, float2_t point) {
+    return point.x >= rect.x &&
+           point.x < rect.x + rect.width &&
+           point.y >= rect.y &&
+           point.y < rect.y + rect.height;
+}
+
 float2_t rect_to_position(rect_t rect) {
     return (float2_t){
         .x = rect.x + (rect.width * 0.5f),

@@ -29,7 +29,11 @@ void input_process_key(keycode_t key_code, bool pressed) {
     }
 }
 
-void input_process_mouse_button(mousebutton_t button, bool pressed);
+void input_process_mouse_button(mousebutton_t button, bool pressed) {
+    if (state_ptr->mouse_current.buttons[button] != pressed) {
+        state_ptr->mouse_current.buttons[button] = pressed;
+    }
+}
 
 void input_process_mouse_move(int16_t x, int16_t y) {
     state_ptr->mouse_current.x = x;
@@ -60,6 +64,34 @@ bool input_is_key_pressed(keycode_t key_code) {
 
 bool input_is_key_released(keycode_t key_code) {
     return input_was_key_down(key_code) && input_is_key_up(key_code);
+}
+
+bool input_is_mouse_button_down(mousebutton_t button) {
+    return state_ptr->mouse_current.buttons[button] == true;
+}
+
+bool input_is_mouse_button_up(mousebutton_t button) {
+    return state_ptr->mouse_current.buttons[button] == false;
+}
+
+bool input_was_mouse_button_down(mousebutton_t button) {
+    return state_ptr->mouse_previous.buttons[button] == true;
+}
+
+bool input_was_mouse_button_up(mousebutton_t button) {
+    return state_ptr->mouse_previous.buttons[button] == false;
+}
+
+bool input_is_mouse_button_pressed(mousebutton_t button) {
+    return input_was_mouse_button_up(button) && input_is_mouse_button_down(button);
+}
+
+bool input_is_mouse_button_released(mousebutton_t button) {
+    return input_was_mouse_button_down(button) && input_is_mouse_button_up(button);
+}
+
+int2_t input_mouse_get_pos(void) {
+    return (int2_t){state_ptr->mouse_current.x, state_ptr->mouse_current.y};
 }
 
 int16_t input_mouse_get_x(void);
