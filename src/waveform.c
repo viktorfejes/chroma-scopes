@@ -3,6 +3,7 @@
 #include "logger.h"
 #include "renderer.h"
 #include "texture.h"
+#include "macros.h"
 
 #include <assert.h>
 
@@ -35,7 +36,9 @@ bool waveform_setup(waveform_t *wf, struct renderer *renderer) {
 
     // Set up structured buffer fo accumulation
     {
-        struct buffer_data { uint32_t r, g, b; };
+        struct buffer_data {
+            uint32_t r, g, b;
+        };
 
         D3D11_BUFFER_DESC buffer_desc = {
             .Usage = D3D11_USAGE_DEFAULT,
@@ -116,7 +119,21 @@ void waveform_render(waveform_t *wf, struct renderer *renderer, texture_t *captu
         (wf->composite_tex.width + (thread_groups[1] - 1)) / thread_groups[1],
         thread_groups[2]);
     context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
+}
 
+void parade_render(waveform_t *wf, struct renderer *renderer) {
+    UNUSED(wf);
+    UNUSED(renderer);
+    // shader_pipeline_bind(context, &renderer->passes.wf_comp);
+    // context->lpVtbl->CSSetShaderResources(context, 0, 1, &wf->accum_srv);
+    // context->lpVtbl->ClearUnorderedAccessViewFloat(context, wf->composite_tex.uav[0], clear_color_float);
+    // context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &wf->composite_tex.uav[0], NULL);
+    // context->lpVtbl->Dispatch(
+    //     context,
+    //     (wf->composite_tex.width + (thread_groups[0] - 1)) / thread_groups[0],
+    //     (wf->composite_tex.width + (thread_groups[1] - 1)) / thread_groups[1],
+    //     thread_groups[2]);
+    // context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
 }
 
 texture_t *waveform_get_texture(waveform_t *wf) {

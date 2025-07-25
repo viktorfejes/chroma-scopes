@@ -23,7 +23,12 @@ void input_swap_buffers(input_state_t *state) {
     state->mouse_scroll_delta = 0;
 }
 
-void input_process_key(keycode_t key_code, bool pressed);
+void input_process_key(keycode_t key_code, bool pressed) {
+    if (state_ptr->keyboard_current.keys[key_code] != pressed) {
+        state_ptr->keyboard_current.keys[key_code] = pressed;
+    }
+}
+
 void input_process_mouse_button(mousebutton_t button, bool pressed);
 
 void input_process_mouse_move(int16_t x, int16_t y) {
@@ -32,6 +37,30 @@ void input_process_mouse_move(int16_t x, int16_t y) {
 }
 
 void input_process_mouse_wheel(int32_t delta);
+
+bool input_is_key_down(keycode_t key_code) {
+    return state_ptr->keyboard_current.keys[key_code] == true;
+}
+
+bool input_is_key_up(keycode_t key_code) {
+    return state_ptr->keyboard_current.keys[key_code] == false;
+}
+
+bool input_was_key_down(keycode_t key_code) {
+    return state_ptr->keyboard_previous.keys[key_code] == true;
+}
+
+bool input_was_key_up(keycode_t key_code) {
+    return state_ptr->keyboard_previous.keys[key_code] == false;
+}
+
+bool input_is_key_pressed(keycode_t key_code) {
+    return input_was_key_up(key_code) && input_is_key_down(key_code);
+}
+
+bool input_is_key_released(keycode_t key_code) {
+    return input_was_key_down(key_code) && input_is_key_up(key_code);
+}
 
 int16_t input_mouse_get_x(void);
 int16_t input_mouse_get_y(void);

@@ -1,14 +1,14 @@
 #include "application.h"
 
-#include "vectorscope.h"
-#include "macros.h"
 #include "input.h"
 #include "logger.h"
+#include "macros.h"
 #include "renderer.h"
 #include "ui.h"
+#include "vectorscope.h"
 #include "window.h"
 
-#define TARGET_FPS 60
+#define TARGET_FPS 30
 #define FIXED_TIMESTEP (1.0 / TARGET_FPS)
 #define MAX_FRAME_TIME 0.25 // 250ms max
 
@@ -30,7 +30,7 @@ typedef struct app_state {
 
 static bool application_initialize(void);
 static void application_terminate(void);
-static void application_update(void);
+static void application_update(double dt);
 static bool application_run(void);
 
 void application_start(void) {
@@ -53,8 +53,14 @@ error:
 static bool application_initialize(void) {
     LOG("Application is initializing");
 
+    // Create the platform -- there is not a lot for this app for now, but we need it
+    if (!platform_initialize()) {
+        LOG("Failed to initialize platform layer");
+        return false;
+    }
+
     // Create the window (we'll probably only ever have one, unless...)
-    if (!window_create("Chroma Scopes", 1280, 720, &window)) {
+    if (!window_create("Chroma Scopes", 1200, 710, &window)) {
         LOG("Couldn't create window");
         return false;
     }
@@ -98,7 +104,7 @@ static bool application_initialize(void) {
     {
         ui_element_t el = ui_create_element();
         el.width = UI_VALUE(100, UI_UNIT_PERCENT);
-        el.height = UI_VALUE(60, UI_UNIT_PIXEL);
+        el.height = UI_VALUE(32, UI_UNIT_PIXEL);
         el.base_style.background_color = (float4_t){0.16f, 0.16f, 0.16f, 1.0f};
         header = ui_insert_element(&ui, &el, body);
     }
@@ -106,6 +112,10 @@ static bool application_initialize(void) {
         ui_element_t el = ui_create_element();
         el.type = UI_ELEMENT_TYPE_FLEX;
         el.flex_direction = UI_FLEX_DIRECTION_ROW;
+        el.gap = (ui_gap_t){
+            .x = UI_VALUE(2, UI_UNIT_PIXEL),
+            .y = UI_VALUE(2, UI_UNIT_PIXEL),
+        },
         el.flex_grow = 1;
         el.width = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){1.0f, 0.0f, 0.0f, 0.0f};
@@ -115,6 +125,10 @@ static bool application_initialize(void) {
         ui_element_t el = ui_create_element();
         el.type = UI_ELEMENT_TYPE_FLEX;
         el.flex_direction = UI_FLEX_DIRECTION_ROW;
+        el.gap = (ui_gap_t){
+            .x = UI_VALUE(2, UI_UNIT_PIXEL),
+            .y = UI_VALUE(2, UI_UNIT_PIXEL),
+        },
         el.flex_grow = 1;
         el.width = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){0.0f, 0.0f, 0.0f, 0.0f};
@@ -174,26 +188,51 @@ static void application_terminate(void) {
     renderer_terminate(&renderer);
 }
 
-static void application_update(void) {
+static void application_update(double dt) {
+    UNUSED(dt);
+    // TEMP: just to test...
+    static bool on_top = false;
+    if (input_is_key_down(KEY_CTRL) && input_is_key_pressed(KEY_P)) {
+        window_set_always_on_top(&window, (on_top = !on_top));
+    }
+
     capture_frame(&renderer.capture, (rect_t){0, 0, 500, 500}, renderer.context, &renderer.blit_texture);
 }
 
 static bool application_run(void) {
     LOG("Application is running");
+    double last_time = platform_get_seconds();
+    double accumulator = 0.0;
 
     while (!window_should_close(&window)) {
         window_proc_messages();
 
-        application_update();
+        double current_time = platform_get_seconds();
+        double elapsed = current_time - last_time;
+        last_time = current_time;
 
+        accumulator += elapsed;
+
+        while (accumulator >= FIXED_TIMESTEP) {
+            application_update(FIXED_TIMESTEP);
+            input_swap_buffers(&input);
+
+            accumulator -= FIXED_TIMESTEP;
+        }
+
+        // application_render...
+        // could add interpolation for rendering as well
         renderer_begin_frame(&renderer);
-            vectorscope_render(&renderer.vectorscope, &renderer, &renderer.blit_texture);
-            waveform_render(&renderer.waveform, &renderer, &renderer.blit_texture);
-            renderer_draw_ui(&renderer, &ui.draw_list);
-            renderer_draw_composite(&renderer);
+        vectorscope_render(&renderer.vectorscope, &renderer, &renderer.blit_texture);
+        waveform_render(&renderer.waveform, &renderer, &renderer.blit_texture);
+        renderer_draw_ui(&renderer, &ui.draw_list);
+        renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);
 
-        input_swap_buffers(&input);
+        double frame_time = platform_get_seconds() - current_time;
+        if (frame_time < FIXED_TIMESTEP) {
+            platform_sleep(FIXED_TIMESTEP - frame_time);
+        }
     }
 
     return true;

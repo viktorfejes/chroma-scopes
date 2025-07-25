@@ -1,7 +1,7 @@
 #include "window.h"
 
-#include "logger.h"
 #include "input.h"
+#include "logger.h"
 
 #include <assert.h>
 #include <windows.h>
@@ -10,8 +10,11 @@
 #define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 
+static double seconds_per_tick; // 1.0 / frequency (precomputed)
+
+static keycode_t vk_to_keycode(WPARAM w_param);
 static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param);
-static BOOL window_resizing(WPARAM w_param, LPARAM l_param);
+static BOOL window_resizing(window_t *window, WPARAM w_param, LPARAM l_param);
 
 bool window_create(const char *title, uint16_t width, uint16_t height, window_t *out_window) {
     assert(out_window && "Out window cannot be NULL");
@@ -97,14 +100,102 @@ bool window_should_close(window_t *window) {
     return window->should_close;
 }
 
-static BOOL window_resizing(WPARAM w_param, LPARAM l_param) {
+void window_set_always_on_top(window_t *window, bool enable) {
+    assert(window);
+    SetWindowPos(window->hwnd, enable ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+}
+
+bool platform_initialize(void) {
+    LARGE_INTEGER frequency;
+    QueryPerformanceFrequency(&frequency);
+    seconds_per_tick = 1.0 / (double)frequency.QuadPart;
+
+    return true;
+}
+
+void platform_sleep(uint64_t ms) {
+    // Timer resolution of 1ms
+    const UINT timer_resolution = 1;
+    timeBeginPeriod(timer_resolution);
+
+    LARGE_INTEGER frequency, start, now;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
+
+    // Calculate the target counter value
+    int64_t target_ticks = start.QuadPart + (ms * frequency.QuadPart) / 1000;
+
+    // Coarse sleep: if ms is greater than the timer resolution,
+    // sleep for nearly the full amount.
+    if (ms > timer_resolution) {
+        Sleep((DWORD)(ms - timer_resolution));
+    }
+
+    // Busy-wait until the target time is reached
+    while (1) {
+        QueryPerformanceCounter(&now);
+        if (now.QuadPart >= target_ticks) {
+            break;
+        }
+        // Hint to the CPU we're in a spin-wait loop
+        YieldProcessor();
+    }
+
+    // Restore the previous timer resolution
+    timeEndPeriod(timer_resolution);
+}
+
+double platform_get_seconds(void) {
+    LARGE_INTEGER now_time;
+    QueryPerformanceCounter(&now_time);
+    return (double)now_time.QuadPart * seconds_per_tick;
+}
+
+static keycode_t vk_to_keycode(WPARAM w_param) {
+    switch (w_param) {
+        case VK_CONTROL:
+            return KEY_CTRL;
+        case '0':
+            return KEY_0;
+        case '1':
+            return KEY_1;
+        case '2':
+            return KEY_2;
+        case '3':
+            return KEY_3;
+        case '4':
+            return KEY_4;
+        case '5':
+            return KEY_5;
+        case '6':
+            return KEY_6;
+        case '7':
+            return KEY_7;
+        case '8':
+            return KEY_8;
+        case '9':
+            return KEY_9;
+        case 'Q':
+            return KEY_Q;
+        case 'W':
+            return KEY_W;
+        case 'E':
+            return KEY_E;
+        case 'R':
+            return KEY_R;
+        case 'P':
+            return KEY_P;
+        default:
+            return KEY_UNKNOWN;
+    }
+}
+
+static BOOL window_resizing(window_t *window, WPARAM w_param, LPARAM l_param) {
     RECT *rect = (RECT *)l_param;
 
     int width = rect->right - rect->left;
     int height = rect->bottom - rect->top;
-
-    // TEMP: This needs to be changed to use the set window aspect ratio
-    float aspect_ratio = 1280.0f / 720.0f;
+    float aspect_ratio = window->width / (float)window->height;
 
     // Calculate new dimensions based on which edge is being dragged
     switch (w_param) {
@@ -172,6 +263,16 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
             return 0;
         }
 
+        case WM_KEYDOWN: {
+            input_process_key(vk_to_keycode(w_param), true);
+            return 0;
+        }
+
+        case WM_KEYUP: {
+            input_process_key(vk_to_keycode(w_param), false);
+            return 0;
+        }
+
         case WM_GETMINMAXINFO: {
             MINMAXINFO *mmi = (MINMAXINFO *)l_param;
             mmi->ptMinTrackSize.x = 500;
@@ -180,7 +281,7 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
         }
 
         case WM_SIZING: {
-            window_resizing(w_param, l_param);
+            window_resizing(window, w_param, l_param);
             return 0;
         }
 
