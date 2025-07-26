@@ -21,6 +21,9 @@ static void position_flex_children(ui_state_t *state, ui_element_t *element);
 static float parse_value(ui_value_t value, float max);
 static float parse_spacing_axis(ui_spacing_t spacing, float comparison_value, bool horizontal);
 static float parse_spacing(ui_value_t spacing, float comparison_size);
+static int16_t ui_find_topmost_hovered(ui_state_t *state, ui_element_t *element);
+static bool ui_bubble_mouse_event(ui_state_t *state, int16_t element_id);
+static void ui_update_hover_states(ui_state_t *state);
 
 #define UI_HORIZONTAL true
 #define UI_VERTICAL false
@@ -30,6 +33,9 @@ static float parse_spacing(ui_value_t spacing, float comparison_size);
 
 bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height) {
     assert(state && "UI state must be a valid pointer");
+
+    state->curr_hovered_element_id = -1;
+    state->prev_hovered_element_id = -1;
 
     // For now just invalidate all elements by setting their id's to invalid
     memset(state->elements, 0, sizeof(ui_element_t) * UI_MAX_ELEMENTS);
@@ -287,49 +293,15 @@ void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root) {
     }
 }
 
-bool ui_handle_mouse_event(ui_state_t *state, ui_element_t *element) {
-    // Check bounds
-    int2_t mouse_pos = input_mouse_get_pos();
-    if (!rect_contains(element->computed.layout, (float2_t){mouse_pos.x, mouse_pos.y})) {
-        return false;
-    }
+void ui_handle_mouse(ui_state_t *state) {
+    // Find hovered element at all times
+    state->curr_hovered_element_id = ui_find_topmost_hovered(state, &state->elements[0]);
 
-    // Process children first (front-to-back)
-    for (int16_t child = element->last_child_id; child != -1; child = state->elements[child].prev_sibling_id) {
-        if (ui_handle_mouse_event(state, &state->elements[child])) {
-            return true; // Child consumed it, we are done!
-        }
-    }
+    // Handle mouse event starting from hovered element, bubbling up
+    ui_bubble_mouse_event(state, state->curr_hovered_element_id);
 
-    // Save out topmost hover
-    state->curr_hovered_element_id = element->id;
-
-    // No child handled it, try current element
-    if (element->handle_mouse) {
-        return element->handle_mouse(element);
-    }
-
-    return false;
-}
-
-void ui_update_hover_states(ui_state_t *state) {
-    // Clear prev hover
-    if (state->prev_hovered_element_id != -1 && state->prev_hovered_element_id != state->curr_hovered_element_id) {
-        ui_element_t *prev_elem = &state->elements[state->prev_hovered_element_id];
-        if (prev_elem->handle_hover_change) {
-            prev_elem->handle_hover_change(prev_elem, false);
-        }
-    }
-
-    // Set new hover
-    if (state->curr_hovered_element_id != -1) {
-        ui_element_t *elem = &state->elements[state->curr_hovered_element_id];
-        if (elem->handle_hover_change) {
-            elem->handle_hover_change(elem, true);
-        }
-    }
-
-    state->prev_hovered_element_id = state->curr_hovered_element_id;
+    // Update hover states
+    ui_update_hover_states(state);
 }
 
 static void layout_block_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height) {
@@ -545,4 +517,55 @@ static float parse_spacing_axis(ui_spacing_t spacing, float comparison_value, bo
     float s1 = parse_spacing(horizontal ? spacing.left : spacing.top, comparison_value);
     float s2 = parse_spacing(horizontal ? spacing.right : spacing.bottom, comparison_value);
     return s1 + s2;
+}
+
+static int16_t ui_find_topmost_hovered(ui_state_t *state, ui_element_t *element) {
+    int2_t mouse_pos = input_mouse_get_pos();
+    if (!rect_contains(element->computed.layout, (float2_t){mouse_pos.x, mouse_pos.y})) {
+        return -1;
+    }
+
+    // Check children first (front-to-back)
+    for (int16_t child = element->last_child_id; child != -1; child = state->elements[child].prev_sibling_id) {
+        int16_t hovered_child = ui_find_topmost_hovered(state, &state->elements[child]);
+        if (hovered_child != -1) {
+            return hovered_child;
+        }
+    }
+
+    return element->id;
+}
+
+static bool ui_bubble_mouse_event(ui_state_t *state, int16_t element_id) {
+    if (element_id == -1) return false;
+
+    ui_element_t *element = &state->elements[element_id];
+
+    // Try current element
+    if (element->handle_mouse && element->handle_mouse(element)) {
+        return true; // Handled, consumed.
+    }
+
+    // Bubble up to parent if not handled
+    return ui_bubble_mouse_event(state, element->parent_id);
+}
+
+static void ui_update_hover_states(ui_state_t *state) {
+    // Clear prev hover
+    if (state->prev_hovered_element_id != -1 && state->prev_hovered_element_id != state->curr_hovered_element_id) {
+        ui_element_t *prev_elem = &state->elements[state->prev_hovered_element_id];
+        if (prev_elem->handle_hover_change) {
+            prev_elem->handle_hover_change(prev_elem, false);
+        }
+    }
+
+    // Set new hover
+    if (state->curr_hovered_element_id != -1) {
+        ui_element_t *elem = &state->elements[state->curr_hovered_element_id];
+        if (elem->handle_hover_change) {
+            elem->handle_hover_change(elem, true);
+        }
+    }
+
+    state->prev_hovered_element_id = state->curr_hovered_element_id;
 }

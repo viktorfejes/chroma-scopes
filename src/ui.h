@@ -141,5 +141,4 @@ void ui_remove_element(ui_state_t *state, uint16_t id);
 void ui_layout_measure(ui_state_t *state, ui_element_t *element, uint16_t min_width, uint16_t max_width, uint16_t min_height, uint16_t max_height);
 void ui_layout_position(ui_state_t *state, ui_element_t *element, float origin_x, float origin_y);
 void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root);
-bool ui_handle_mouse_event(ui_state_t *state, ui_element_t *element);
-void ui_update_hover_states(ui_state_t *state);
+void ui_handle_mouse(ui_state_t *state);

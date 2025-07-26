@@ -60,7 +60,6 @@ static bool test_ui_events(ui_element_t *el) {
 }
 
 static void test_hover(ui_element_t *el, bool is_hovered) {
-        LOG("Get in here?");
     if (is_hovered) {
         el->base_style.background_color = (float4_t){0.8f, 0.0f, 0.0f, 1.0f};
     } else {
@@ -260,6 +259,10 @@ static void application_update(double dt) {
         window_set_always_on_top(&window, (on_top = !on_top));
     }
 
+    if (input_is_mouse_button_pressed(MOUSE_BUTTON_LEFT)) {
+        LOG("Clicked on element id: %d", ui.curr_hovered_element_id);
+    }
+
     capture_frame(&renderer.capture, (rect_t){0, 0, 500, 500}, renderer.context, &renderer.blit_texture);
 }
 
@@ -282,8 +285,7 @@ static bool application_run(void) {
         accumulator += elapsed;
 
         while (accumulator >= FIXED_TIMESTEP) {
-            ui_handle_mouse_event(&ui, &ui.elements[0]);
-            ui_update_hover_states(&ui);
+            ui_handle_mouse(&ui);
 
             application_update(FIXED_TIMESTEP);
             input_swap_buffers(&input);
