@@ -223,7 +223,7 @@ void renderer_calculate_vectorscope(renderer_t *renderer, const texture_t *in_te
     context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
 }
 
-void renderer_draw_ui(renderer_t *renderer, const struct ui_draw_list *draw_list) {
+void renderer_draw_ui(renderer_t *renderer, struct ui_state *ui_state, struct ui_element *root) {
     ID3D11DeviceContext1 *context = renderer->context;
     float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
@@ -250,34 +250,7 @@ void renderer_draw_ui(renderer_t *renderer, const struct ui_draw_list *draw_list
     };
     context->lpVtbl->RSSetViewports(context, 1, &viewport);
 
-    uint32_t count = draw_list->count;
-    for (uint32_t i = 0; i < count; ++i) {
-        const ui_draw_command_t *command = &draw_list->commands[i];
-
-        // Bind the per object data
-        D3D11_MAPPED_SUBRESOURCE mapped;
-        context->lpVtbl->Map(context, (ID3D11Resource *)renderer->per_ui_mesh_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-
-        struct per_ui_mesh_data *per_mesh_buffer = mapped.pData;
-        per_mesh_buffer->position = command->position;
-        per_mesh_buffer->size = command->size;
-        per_mesh_buffer->color = command->background_color;
-
-        context->lpVtbl->Unmap(context, (ID3D11Resource *)renderer->per_ui_mesh_buffer, 0);
-
-        context->lpVtbl->VSSetConstantBuffers(context, 1, 1, &renderer->per_ui_mesh_buffer);
-        context->lpVtbl->PSSetConstantBuffers(context, 1, 1, &renderer->per_ui_mesh_buffer);
-
-        // Set texture if any is present
-        if (command->background_image) {
-            context->lpVtbl->PSSetShaderResources(context, 0, 1, &command->background_image->srv);
-        } else {
-            context->lpVtbl->PSSetShaderResources(context, 0, 1, &renderer->default_white_px.srv);
-        }
-
-        // Draw the UI mesh
-        context->lpVtbl->Draw(context, 6, 0);
-    }
+    ui_draw(ui_state, renderer, root);
 }
 
 void renderer_draw_composite(renderer_t *renderer) {

@@ -59,6 +59,15 @@ static bool test_ui_events(ui_element_t *el) {
     return false;
 }
 
+static void test_hover(ui_element_t *el, bool is_hovered) {
+        LOG("Get in here?");
+    if (is_hovered) {
+        el->base_style.background_color = (float4_t){0.8f, 0.0f, 0.0f, 1.0f};
+    } else {
+        el->base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
+    }
+}
+
 static bool application_initialize(void) {
     LOG("Application is initializing");
 
@@ -96,7 +105,8 @@ static bool application_initialize(void) {
     texture_t *vs_tex = vectorscope_get_texture(&renderer.vectorscope);
     texture_t *wf_tex = waveform_get_texture(&renderer.waveform);
 
-    uint16_t body, header, row1, row2, tl_comp, tr_comp, bl_comp, br_comp;
+    uint16_t body, header, row1, row2, tl_comp, tr_comp, bl_comp, br_comp, title, buttons,
+        minimize, maximize, close;
     {
         ui_element_t el = ui_create_element();
         el.type = UI_ELEMENT_TYPE_FLEX;
@@ -112,10 +122,50 @@ static bool application_initialize(void) {
     }
     {
         ui_element_t el = ui_create_element();
+        el.type = UI_ELEMENT_TYPE_FLEX;
+        el.flex_direction = UI_FLEX_DIRECTION_ROW;
+        el.flex_main_axis_alignment = UI_FLEX_ALIGN_SPACE_BETWEEN;
+        el.flex_cross_axis_alignment = UI_FLEX_ALIGN_CENTER;
         el.width = UI_VALUE(100, UI_UNIT_PERCENT);
         el.height = UI_VALUE(32, UI_UNIT_PIXEL);
         el.base_style.background_color = (float4_t){0.16f, 0.16f, 0.16f, 1.0f};
         header = ui_insert_element(&ui, &el, body);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.height = UI_VALUE(16, UI_UNIT_PIXEL);
+        el.base_style.background_color = (float4_t){0.5f, 0.5f, 0.5f, 1.0f};
+        title = ui_insert_element(&ui, &el, header);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.type = UI_ELEMENT_TYPE_FLEX;
+        el.width = UI_VALUE(170, UI_UNIT_PIXEL);
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
+        buttons = ui_insert_element(&ui, &el, header);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.flex_grow = 1;
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
+        minimize = ui_insert_element(&ui, &el, buttons);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.flex_grow = 1;
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
+        maximize = ui_insert_element(&ui, &el, buttons);
+    }
+    {
+        ui_element_t el = ui_create_element();
+        el.flex_grow = 1;
+        el.height = UI_VALUE(100, UI_UNIT_PERCENT);
+        el.base_style.background_color = (float4_t){1.0f, 0.3f, 0.3f, 1.0f};
+        el.handle_hover_change = test_hover;
+        close = ui_insert_element(&ui, &el, buttons);
     }
     {
         ui_element_t el = ui_create_element();
@@ -181,10 +231,14 @@ static bool application_initialize(void) {
     UNUSED(tr_comp);
     UNUSED(bl_comp);
     UNUSED(br_comp);
+    UNUSED(buttons);
+    UNUSED(title);
+    UNUSED(close);
+    UNUSED(maximize);
+    UNUSED(minimize);
 
     ui_layout_measure(&ui, &ui.elements[0], 0.0f, (float)window.width, 0.0f, (float)window.height);
     ui_layout_position(&ui, &ui.elements[0], 0.0f, 0.0f);
-    ui_draw(&ui, &ui.elements[0]);
 
     capture_set_monitor(&renderer.capture, renderer.device, 1);
 
@@ -221,10 +275,16 @@ static bool application_run(void) {
         double elapsed = current_time - last_time;
         last_time = current_time;
 
+        if (elapsed > MAX_FRAME_TIME) {
+            elapsed = MAX_FRAME_TIME;
+        }
+
         accumulator += elapsed;
 
         while (accumulator >= FIXED_TIMESTEP) {
             ui_handle_mouse_event(&ui, &ui.elements[0]);
+            ui_update_hover_states(&ui);
+
             application_update(FIXED_TIMESTEP);
             input_swap_buffers(&input);
 
@@ -236,7 +296,7 @@ static bool application_run(void) {
         renderer_begin_frame(&renderer);
         vectorscope_render(&renderer.vectorscope, &renderer, &renderer.blit_texture);
         waveform_render(&renderer.waveform, &renderer, &renderer.blit_texture);
-        renderer_draw_ui(&renderer, &ui.draw_list);
+        renderer_draw_ui(&renderer, &ui, &ui.elements[0]);
         renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);
 

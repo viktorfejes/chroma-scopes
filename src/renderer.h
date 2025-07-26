@@ -11,7 +11,8 @@
 #include <d3d11_1.h>
 #include <dxgi1_4.h>
 
-struct ui_draw_list;
+struct ui_state;
+struct ui_element;
 struct window;
 
 typedef struct swapchain {
@@ -122,7 +123,7 @@ void renderer_calculate_vectorscope(renderer_t *renderer, const texture_t* in_te
 void renderer_calculate_waveform(renderer_t *renderer, const texture_t *in_texture, texture_t *out_texture);
 void renderer_calculate_histogram(renderer_t *renderer, const texture_t *in_texture, texture_t *out_texture);
 
-void renderer_draw_ui(renderer_t *renderer, const struct ui_draw_list *draw_list);
+void renderer_draw_ui(renderer_t *renderer, struct ui_state *ui_state, struct ui_element *root);
 void renderer_draw_composite(renderer_t *renderer);
 
 void check_d3d11_debug_messages(ID3D11Device *device);

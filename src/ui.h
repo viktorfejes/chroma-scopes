@@ -5,9 +5,11 @@
 #include <stdint.h>
 
 struct texture;
+struct renderer;
 struct ui_element;
 
 typedef bool (*mouse_event_fn)(struct ui_element *el);
+typedef void (*hover_event_fn)(struct ui_element *el, bool is_hovered);
 
 typedef enum ui_element_type {
     UI_ELEMENT_TYPE_BLOCK = 0,
@@ -75,6 +77,7 @@ typedef struct ui_element {
 
     /* Function pointer for mouse events */
     mouse_event_fn handle_mouse;
+    hover_event_fn handle_hover_change;
 
     /* Type of the UI element. Equivalent to CSS `display` */
     ui_element_type_t type;
@@ -120,8 +123,14 @@ typedef struct ui_draw_list {
 } ui_draw_list_t;
 
 typedef struct ui_state {
+    /* All elements in an array forming a tree doubly linked list */
     ui_element_t elements[UI_MAX_ELEMENTS];
-    ui_draw_list_t draw_list;
+
+    /* Hover state tracking */
+    int16_t curr_hovered_element_id;
+    int16_t prev_hovered_element_id;
+
+    /* 1px background so something can always be bound avoiding branchin */
     struct texture *default_background_texture;
 } ui_state_t;
 
@@ -131,5 +140,6 @@ uint16_t ui_insert_element(ui_state_t *state, ui_element_t *element, uint16_t pa
 void ui_remove_element(ui_state_t *state, uint16_t id);
 void ui_layout_measure(ui_state_t *state, ui_element_t *element, uint16_t min_width, uint16_t max_width, uint16_t min_height, uint16_t max_height);
 void ui_layout_position(ui_state_t *state, ui_element_t *element, float origin_x, float origin_y);
-void ui_draw(ui_state_t *state, ui_element_t *root);
+void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root);
 bool ui_handle_mouse_event(ui_state_t *state, ui_element_t *element);
+void ui_update_hover_states(ui_state_t *state);

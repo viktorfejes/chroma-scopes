@@ -1,13 +1,19 @@
 #include "ui.h"
 
+#include "input.h"
 #include "logger.h"
 #include "macros.h"
-#include "input.h"
+#include "renderer.h"
 
 #include <assert.h>
 #include <string.h>
 
-static void draw_element(ui_state_t *state, ui_element_t *root);
+struct per_ui_mesh_data {
+    float2_t position;
+    float2_t size;
+    float4_t color;
+};
+
 static void layout_block_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height);
 static void layout_flex_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height);
 static void position_block_children(ui_state_t *state, ui_element_t *element);
@@ -36,9 +42,6 @@ bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height)
         el->next_sibling_id = -1;
         el->prev_sibling_id = -1;
     }
-
-    // Make sure draw list count is 0
-    state->draw_list.count = 0;
 
     // Add ROOT by default (the size of window)
     ui_element_t *root = &state->elements[UI_ROOT_ID];
@@ -250,16 +253,37 @@ void ui_layout_position(ui_state_t *state, ui_element_t *element, float origin_x
     }
 }
 
-void ui_draw(ui_state_t *state, ui_element_t *root) {
+void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root) {
     assert(state && "UI state must be a valid pointer");
 
-    draw_element(state, root);
+    ID3D11DeviceContext1 *context = renderer->context;
 
-    int32_t child_idx = root->first_child_id;
-    while (child_idx != -1) {
-        ui_element_t *child = &state->elements[child_idx];
-        ui_draw(state, child);
-        child_idx = child->next_sibling_id;
+    // Bind the per object data
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    context->lpVtbl->Map(context, (ID3D11Resource *)renderer->per_ui_mesh_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+
+    struct per_ui_mesh_data *per_mesh_buffer = mapped.pData;
+    per_mesh_buffer->position = rect_to_position(root->computed.layout);
+    per_mesh_buffer->size = rect_to_size(root->computed.layout);
+    per_mesh_buffer->color = root->base_style.background_color;
+
+    context->lpVtbl->Unmap(context, (ID3D11Resource *)renderer->per_ui_mesh_buffer, 0);
+    context->lpVtbl->VSSetConstantBuffers(context, 1, 1, &renderer->per_ui_mesh_buffer);
+    context->lpVtbl->PSSetConstantBuffers(context, 1, 1, &renderer->per_ui_mesh_buffer);
+
+    // Set texture if any is present
+    if (root->base_style.background_image) {
+        context->lpVtbl->PSSetShaderResources(context, 0, 1, &root->base_style.background_image->srv);
+    } else {
+        context->lpVtbl->PSSetShaderResources(context, 0, 1, &renderer->default_white_px.srv);
+    }
+
+    // Draw the UI mesh
+    context->lpVtbl->Draw(context, 6, 0);
+
+    // Repeat for the children recursively
+    for (int16_t child = root->first_child_id; child != -1; child = state->elements[child].next_sibling_id) {
+        ui_draw(state, renderer, &state->elements[child]);
     }
 }
 
@@ -273,9 +297,12 @@ bool ui_handle_mouse_event(ui_state_t *state, ui_element_t *element) {
     // Process children first (front-to-back)
     for (int16_t child = element->last_child_id; child != -1; child = state->elements[child].prev_sibling_id) {
         if (ui_handle_mouse_event(state, &state->elements[child])) {
-            return true;    // Child consumed it, we are done!
+            return true; // Child consumed it, we are done!
         }
     }
+
+    // Save out topmost hover
+    state->curr_hovered_element_id = element->id;
 
     // No child handled it, try current element
     if (element->handle_mouse) {
@@ -285,15 +312,24 @@ bool ui_handle_mouse_event(ui_state_t *state, ui_element_t *element) {
     return false;
 }
 
-static void draw_element(ui_state_t *state, ui_element_t *root) {
-    ui_draw_command_t *command = &state->draw_list.commands[state->draw_list.count];
+void ui_update_hover_states(ui_state_t *state) {
+    // Clear prev hover
+    if (state->prev_hovered_element_id != -1 && state->prev_hovered_element_id != state->curr_hovered_element_id) {
+        ui_element_t *prev_elem = &state->elements[state->prev_hovered_element_id];
+        if (prev_elem->handle_hover_change) {
+            prev_elem->handle_hover_change(prev_elem, false);
+        }
+    }
 
-    command->position = rect_to_position(root->computed.layout);
-    command->size = rect_to_size(root->computed.layout);
-    command->background_color = root->base_style.background_color;
-    command->background_image = root->base_style.background_image;
+    // Set new hover
+    if (state->curr_hovered_element_id != -1) {
+        ui_element_t *elem = &state->elements[state->curr_hovered_element_id];
+        if (elem->handle_hover_change) {
+            elem->handle_hover_change(elem, true);
+        }
+    }
 
-    state->draw_list.count++;
+    state->prev_hovered_element_id = state->curr_hovered_element_id;
 }
 
 static void layout_block_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height) {
@@ -510,4 +546,3 @@ static float parse_spacing_axis(ui_spacing_t spacing, float comparison_value, bo
     float s2 = parse_spacing(horizontal ? spacing.right : spacing.bottom, comparison_value);
     return s1 + s2;
 }
-
