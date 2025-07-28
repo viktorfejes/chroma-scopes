@@ -33,6 +33,10 @@ static void application_terminate(void);
 static void application_update(double dt);
 static bool application_run(void);
 
+static bool interact_close(ui_element_t *el);
+static bool interact_minimize(ui_element_t *el);
+static bool interact_restore(ui_element_t *el);
+
 void application_start(void) {
     LOG("Application started");
 
@@ -132,6 +136,7 @@ static bool application_initialize(void) {
     }
     {
         ui_element_t el = ui_create_element();
+        el.flex_grow = 1;
         el.height = UI_VALUE(16, UI_UNIT_PIXEL);
         el.base_style.background_color = (float4_t){0.5f, 0.5f, 0.5f, 1.0f};
         title = ui_insert_element(&ui, &el, header);
@@ -149,6 +154,7 @@ static bool application_initialize(void) {
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
+        el.handle_mouse = interact_minimize;
         minimize = ui_insert_element(&ui, &el, buttons);
     }
     {
@@ -156,6 +162,7 @@ static bool application_initialize(void) {
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
+        el.handle_mouse = interact_restore;
         maximize = ui_insert_element(&ui, &el, buttons);
     }
     {
@@ -164,6 +171,7 @@ static bool application_initialize(void) {
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){1.0f, 0.3f, 0.3f, 1.0f};
         el.handle_hover_change = test_hover;
+        el.handle_mouse = interact_close;
         close = ui_insert_element(&ui, &el, buttons);
     }
     {
@@ -239,6 +247,9 @@ static bool application_initialize(void) {
     ui_layout_measure(&ui, &ui.elements[0], 0.0f, (float)window.width, 0.0f, (float)window.height);
     ui_layout_position(&ui, &ui.elements[0], 0.0f, 0.0f);
 
+    // Also make this the draggable area
+    window_set_custom_dragarea(&window, ui.elements[title].computed.layout);
+
     capture_set_monitor(&renderer.capture, renderer.device, 1);
 
     return true;
@@ -260,7 +271,16 @@ static void application_update(double dt) {
     }
 
     if (input_is_mouse_button_pressed(MOUSE_BUTTON_LEFT)) {
-        LOG("Clicked on element id: %d", ui.curr_hovered_element_id);
+        if (ui.curr_hovered_element_id != -1) {
+            ui_element_t *el = &ui.elements[ui.curr_hovered_element_id];
+            int2_t mouse_pos = input_mouse_get_pos();
+
+            LOG("Element (%d): Position (%.2f, %.2f), Size (%.2f, %.2f)",
+                el->id,
+                el->computed.layout.x, el->computed.layout.y,
+                el->computed.layout.width, el->computed.layout.height);
+            LOG("Mouse Position: (%d, %d)", mouse_pos.x, mouse_pos.y);
+        }
     }
 
     capture_frame(&renderer.capture, (rect_t){0, 0, 500, 500}, renderer.context, &renderer.blit_texture);
@@ -298,10 +318,11 @@ static bool application_run(void) {
         renderer_begin_frame(&renderer);
         vectorscope_render(&renderer.vectorscope, &renderer, &renderer.blit_texture);
         waveform_render(&renderer.waveform, &renderer, &renderer.blit_texture);
-        renderer_draw_ui(&renderer, &ui, &ui.elements[0]);
+        renderer_draw_ui(&renderer, &ui, &ui.elements[0], false);
         renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);
 
+        // Limit FPS
         double frame_time = platform_get_seconds() - current_time;
         if (frame_time < FIXED_TIMESTEP) {
             platform_sleep(FIXED_TIMESTEP - frame_time);
@@ -309,4 +330,31 @@ static bool application_run(void) {
     }
 
     return true;
+}
+
+static bool interact_close(ui_element_t *el) {
+    UNUSED(el);
+    if (input_is_mouse_button_down(MOUSE_BUTTON_LEFT)) {
+        window_post_close(&window);
+        return true;
+    }
+    return false;
+}
+
+static bool interact_minimize(ui_element_t *el) {
+    UNUSED(el);
+    if (input_is_mouse_button_down(MOUSE_BUTTON_LEFT)) {
+        window_minimize(&window);
+        return true;
+    }
+    return false;
+}
+
+static bool interact_restore(ui_element_t *el) {
+    UNUSED(el);
+    if (input_is_mouse_button_down(MOUSE_BUTTON_LEFT)) {
+        window_maximize_restore(&window);
+        return true;
+    }
+    return false;
 }

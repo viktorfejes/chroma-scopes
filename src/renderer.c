@@ -223,12 +223,12 @@ void renderer_calculate_vectorscope(renderer_t *renderer, const texture_t *in_te
     context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
 }
 
-void renderer_draw_ui(renderer_t *renderer, struct ui_state *ui_state, struct ui_element *root) {
+void renderer_draw_ui(renderer_t *renderer, struct ui_state *ui_state, struct ui_element *root, bool debug_view) {
     ID3D11DeviceContext1 *context = renderer->context;
     float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
     // Binding states
-    context->lpVtbl->RSSetState(context, renderer->rasterizer_states[RASTER_2D_DEFAULT]);
+    context->lpVtbl->RSSetState(context, renderer->rasterizer_states[debug_view ? RASTER_2D_WIREFRAME : RASTER_2D_DEFAULT]);
     context->lpVtbl->OMSetBlendState(context, renderer->blend_states[BLEND_ALPHA], NULL, 0xFFFFFFFF);
 
     // Clear and bind the render target (no depth needed)
@@ -250,7 +250,7 @@ void renderer_draw_ui(renderer_t *renderer, struct ui_state *ui_state, struct ui
     };
     context->lpVtbl->RSSetViewports(context, 1, &viewport);
 
-    ui_draw(ui_state, renderer, root);
+    ui_draw(ui_state, renderer, root, debug_view);
 }
 
 void renderer_draw_composite(renderer_t *renderer) {

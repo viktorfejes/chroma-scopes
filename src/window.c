@@ -4,6 +4,7 @@
 #include "logger.h"
 
 #include <assert.h>
+#include <shellscalingapi.h>
 #include <windows.h>
 
 #define DEFAULT_WIN_CLASS_NAME L"DefaultWinClassName"
@@ -18,6 +19,8 @@ static BOOL window_resizing(window_t *window, WPARAM w_param, LPARAM l_param);
 
 bool window_create(const char *title, uint16_t width, uint16_t height, window_t *out_window) {
     assert(out_window && "Out window cannot be NULL");
+
+    // SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     HINSTANCE h_instance = GetModuleHandle(NULL);
 
@@ -37,9 +40,12 @@ bool window_create(const char *title, uint16_t width, uint16_t height, window_t 
         return false;
     }
 
+    DWORD w_style = WS_POPUP | WS_VISIBLE;
+    DWORD w_ex_style = WS_EX_APPWINDOW;
+
     // Adjust window size to account for decoration
     RECT wr = {.left = 0, .top = 0, .right = (LONG)width, .bottom = (LONG)height};
-    AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
+    AdjustWindowRect(&wr, w_style, FALSE);
 
     // Convert title to wide char from char
     wchar_t title_wide[256];
@@ -47,10 +53,10 @@ bool window_create(const char *title, uint16_t width, uint16_t height, window_t 
 
     // Create the window itself
     out_window->hwnd = CreateWindowExW(
-        0,
+        w_ex_style,
         DEFAULT_WIN_CLASS_NAME,
         title_wide,
-        WS_OVERLAPPEDWINDOW,
+        w_style,
         CW_USEDEFAULT, CW_USEDEFAULT,
         wr.right - wr.left,
         wr.bottom - wr.top,
@@ -65,8 +71,8 @@ bool window_create(const char *title, uint16_t width, uint16_t height, window_t 
     }
 
     // Fill out member variables
-    out_window->width = wr.right - wr.left;
-    out_window->height = wr.bottom - wr.top;
+    out_window->width = width;
+    out_window->height = height;
     out_window->x = CW_USEDEFAULT;
     out_window->y = CW_USEDEFAULT;
 
@@ -100,9 +106,32 @@ bool window_should_close(window_t *window) {
     return window->should_close;
 }
 
+void window_post_close(window_t *window) {
+    assert(window);
+    PostMessage(window->hwnd, WM_CLOSE, 0, 0);
+}
+
+void window_minimize(window_t *window) {
+    assert(window);
+    ShowWindow(window->hwnd, SW_MINIMIZE);
+}
+
+void window_maximize_restore(window_t *window) {
+    assert(window);
+    WINDOWPLACEMENT placement;
+    placement.length = sizeof(placement);
+    GetWindowPlacement(window->hwnd, &placement);
+    ShowWindow(window->hwnd, placement.showCmd == SW_MAXIMIZE ? SW_RESTORE : SW_MAXIMIZE);
+}
+
 void window_set_always_on_top(window_t *window, bool enable) {
     assert(window);
     SetWindowPos(window->hwnd, enable ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+}
+
+void window_set_custom_dragarea(window_t *window, rect_t area) {
+    assert(window);
+    window->custom_dragbar = area;
 }
 
 bool platform_initialize(void) {
@@ -190,6 +219,7 @@ static keycode_t vk_to_keycode(WPARAM w_param) {
     }
 }
 
+// TODO: make sure the resizing logic is correct!
 static BOOL window_resizing(window_t *window, WPARAM w_param, LPARAM l_param) {
     RECT *rect = (RECT *)l_param;
 
@@ -263,6 +293,15 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
             return 0;
         }
 
+        case WM_NCHITTEST: {
+            POINT screen_point = {GET_X_LPARAM(l_param), GET_Y_LPARAM(l_param)};
+            ScreenToClient(hwnd, &screen_point);
+            if (rect_contains(window->custom_dragbar, (float2_t){screen_point.x, screen_point.y})) {
+                return HTCAPTION;
+            }
+            return HTCLIENT;
+        }
+
         case WM_LBUTTONDOWN:
         case WM_LBUTTONUP:
         case WM_RBUTTONDOWN:
@@ -270,7 +309,10 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
         case WM_MBUTTONDOWN:
         case WM_MBUTTONUP: {
             bool pressed = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN;
-            if (pressed)  SetCapture(hwnd); else ReleaseCapture();
+            if (pressed)
+                SetCapture(hwnd);
+            else
+                ReleaseCapture();
             mousebutton_t mb = MOUSE_BUTTON_COUNT;
 
             switch (msg) {
@@ -287,7 +329,7 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
                     mb = MOUSE_BUTTON_MIDDLE;
                     break;
             }
-            
+
             if (mb < MOUSE_BUTTON_COUNT) {
                 input_process_mouse_button(mb, pressed);
             }

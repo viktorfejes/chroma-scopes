@@ -16,7 +16,7 @@ target("chroma-scopes")
     add_syslinks("d3d11", "d3dcompiler", "dxgi", "uuid", "dxguid", "shcore", "winmm")
     -- add_cxflags("-fno-sanitize=vptr")
 
-    add_defines("WINVER=0x0603", "_WIN32_WINNT=0x0603")
+    add_defines("WINVER=0x0A00", "_WIN32_WINNT=0x0A00")
     if is_mode("debug") then
         add_defines("_DEBUG")
     end

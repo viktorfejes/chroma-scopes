@@ -259,7 +259,7 @@ void ui_layout_position(ui_state_t *state, ui_element_t *element, float origin_x
     }
 }
 
-void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root) {
+void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root, bool debug_view) {
     assert(state && "UI state must be a valid pointer");
 
     ID3D11DeviceContext1 *context = renderer->context;
@@ -271,14 +271,14 @@ void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root) {
     struct per_ui_mesh_data *per_mesh_buffer = mapped.pData;
     per_mesh_buffer->position = rect_to_position(root->computed.layout);
     per_mesh_buffer->size = rect_to_size(root->computed.layout);
-    per_mesh_buffer->color = root->base_style.background_color;
+    per_mesh_buffer->color = debug_view ? (float4_t){1.0f, 1.0f, 1.0f, 1.0f} : root->base_style.background_color;
 
     context->lpVtbl->Unmap(context, (ID3D11Resource *)renderer->per_ui_mesh_buffer, 0);
     context->lpVtbl->VSSetConstantBuffers(context, 1, 1, &renderer->per_ui_mesh_buffer);
     context->lpVtbl->PSSetConstantBuffers(context, 1, 1, &renderer->per_ui_mesh_buffer);
 
     // Set texture if any is present
-    if (root->base_style.background_image) {
+    if (root->base_style.background_image && !debug_view) {
         context->lpVtbl->PSSetShaderResources(context, 0, 1, &root->base_style.background_image->srv);
     } else {
         context->lpVtbl->PSSetShaderResources(context, 0, 1, &renderer->default_white_px.srv);
@@ -289,7 +289,7 @@ void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root) {
 
     // Repeat for the children recursively
     for (int16_t child = root->first_child_id; child != -1; child = state->elements[child].next_sibling_id) {
-        ui_draw(state, renderer, &state->elements[child]);
+        ui_draw(state, renderer, &state->elements[child], debug_view);
     }
 }
 
@@ -302,6 +302,11 @@ void ui_handle_mouse(ui_state_t *state) {
 
     // Update hover states
     ui_update_hover_states(state);
+}
+
+ui_element_t *ui_get_hovered(ui_state_t *state) {
+    assert(state);
+    return state->curr_hovered_element_id != -1 ? &state->elements[state->curr_hovered_element_id] : NULL;
 }
 
 static void layout_block_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height) {

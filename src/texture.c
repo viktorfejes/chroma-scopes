@@ -280,7 +280,6 @@ bool texture_create_from_backbuffer(ID3D11Device1 *device, IDXGISwapChain3 *swap
     backbuffer->lpVtbl->GetDesc(backbuffer, &desc);
 
     out_texture->width = desc.Width;
-    out_texture->width = desc.Width;
     out_texture->height = desc.Height;
     out_texture->format = desc.Format;
     out_texture->mip_levels = desc.MipLevels;
@@ -289,6 +288,8 @@ bool texture_create_from_backbuffer(ID3D11Device1 *device, IDXGISwapChain3 *swap
     out_texture->msaa_samples = desc.SampleDesc.Count;
     out_texture->is_cubemap = false; // Backbuffers are never cubemaps
     out_texture->bind_flags = desc.BindFlags;
+
+    LOG("Texture (%dx%d) successfully created from backbuffer", out_texture->width, out_texture->height);
 
     // Release the backbuffer
     backbuffer->lpVtbl->Release(backbuffer);

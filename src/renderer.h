@@ -123,7 +123,7 @@ void renderer_calculate_vectorscope(renderer_t *renderer, const texture_t* in_te
 void renderer_calculate_waveform(renderer_t *renderer, const texture_t *in_texture, texture_t *out_texture);
 void renderer_calculate_histogram(renderer_t *renderer, const texture_t *in_texture, texture_t *out_texture);
 
-void renderer_draw_ui(renderer_t *renderer, struct ui_state *ui_state, struct ui_element *root);
+void renderer_draw_ui(renderer_t *renderer, struct ui_state *ui_state, struct ui_element *root, bool debug_view);
 void renderer_draw_composite(renderer_t *renderer);
 
 void check_d3d11_debug_messages(ID3D11Device *device);
