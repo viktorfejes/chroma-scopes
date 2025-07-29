@@ -20,7 +20,7 @@ static BOOL window_resizing(window_t *window, WPARAM w_param, LPARAM l_param);
 bool window_create(const char *title, uint16_t width, uint16_t height, window_t *out_window) {
     assert(out_window && "Out window cannot be NULL");
 
-    // SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     HINSTANCE h_instance = GetModuleHandle(NULL);
 

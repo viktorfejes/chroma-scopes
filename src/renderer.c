@@ -20,6 +20,8 @@ struct per_frame_data {
 struct per_ui_mesh_data {
     float2_t position;
     float2_t size;
+    float2_t uv_offset;
+    float2_t uv_scale;
     float4_t color;
 };
 
@@ -837,8 +839,10 @@ static bool create_textures(renderer_t *renderer) {
     }
 
     // Create 1px white texture
+    // TODO: I am changing this to transparent 1px texture
+    // have to update name and comments and usage accordingly
     {
-        uint8_t data[4] = {255, 255, 255, 255};
+        uint8_t data[4] = {0, 0, 0, 0};
 
         if (!texture_create_from_data(device, data, 1, 1, &renderer->default_white_px)) {
             LOG("Failed to create default 1px white texture");

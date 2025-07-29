@@ -55,9 +55,15 @@ typedef struct ui_gap {
     ui_value_t y;
 } ui_gap_t;
 
+typedef struct ui_uv_region {
+    float2_t offset;
+    float2_t scale;
+} ui_uv_region_t;
+
 typedef struct ui_styling {
     float4_t background_color;
     struct texture *background_image;
+    ui_uv_region_t background_uv;
 } ui_styling_t;
 
 typedef struct ui_computed {
@@ -143,3 +149,5 @@ void ui_layout_position(ui_state_t *state, ui_element_t *element, float origin_x
 void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root, bool debug_view);
 void ui_handle_mouse(ui_state_t *state);
 ui_element_t *ui_get_hovered(ui_state_t *state);
+
+ui_uv_region_t ui_calc_uv_from_pixels(uint16_t atlas_x, uint16_t atlas_y, uint16_t region_w, uint16_t region_h, uint16_t atlas_w, uint16_t atlas_h);

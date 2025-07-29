@@ -5,6 +5,8 @@ cbuffer PerFrameData : register(b0) {
 cbuffer PerObjectData : register(b1) {
     float2 position;
     float2 size;
+    float2 uv_offset;
+    float2 uv_scale;
     float4 color;
 };
 
@@ -36,8 +38,9 @@ VSOutput main(uint vertex_id : SV_VertexID) {
     o.position = mul(projection, float4(world_pos, 0.0, 1.0));
 
     // UV
-    o.uv = local_pos + 0.5;
-    o.uv.y = 1.0 - o.uv.y;
+    float2 base_uv = local_pos + 0.5;
+    base_uv.y = 1.0 - base_uv.y;
+    o.uv = uv_offset + base_uv * uv_scale;
     
     return o;
 }

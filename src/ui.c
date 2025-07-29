@@ -11,6 +11,8 @@
 struct per_ui_mesh_data {
     float2_t position;
     float2_t size;
+    float2_t uv_offset;
+    float2_t uv_scale;
     float4_t color;
 };
 
@@ -47,6 +49,8 @@ bool ui_initialize(ui_state_t *state, uint16_t root_width, uint16_t root_height)
         el->last_child_id = -1;
         el->next_sibling_id = -1;
         el->prev_sibling_id = -1;
+        el->base_style.background_uv.scale = (float2_t){1.0f, 1.0f};
+        el->hover_style.background_uv.scale = (float2_t){1.0f, 1.0f};
     }
 
     // Add ROOT by default (the size of window)
@@ -70,7 +74,9 @@ ui_element_t ui_create_element(void) {
         .last_child_id = -1,
         .next_sibling_id = -1,
         .prev_sibling_id = -1,
-        .base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f},
+        .base_style.background_uv.scale = (float2_t){1.0f, 1.0f},
+        .hover_style.background_uv.scale = (float2_t){1.0f, 1.0f},
+        .base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 0.0f}, // Transparent background by default
     };
 
     return default_element;
@@ -271,6 +277,8 @@ void ui_draw(ui_state_t *state, struct renderer *renderer, ui_element_t *root, b
     struct per_ui_mesh_data *per_mesh_buffer = mapped.pData;
     per_mesh_buffer->position = rect_to_position(root->computed.layout);
     per_mesh_buffer->size = rect_to_size(root->computed.layout);
+    per_mesh_buffer->uv_offset = root->base_style.background_uv.offset;
+    per_mesh_buffer->uv_scale = root->base_style.background_uv.scale;
     per_mesh_buffer->color = debug_view ? (float4_t){1.0f, 1.0f, 1.0f, 1.0f} : root->base_style.background_color;
 
     context->lpVtbl->Unmap(context, (ID3D11Resource *)renderer->per_ui_mesh_buffer, 0);
@@ -307,6 +315,19 @@ void ui_handle_mouse(ui_state_t *state) {
 ui_element_t *ui_get_hovered(ui_state_t *state) {
     assert(state);
     return state->curr_hovered_element_id != -1 ? &state->elements[state->curr_hovered_element_id] : NULL;
+}
+
+ui_uv_region_t ui_calc_uv_from_pixels(uint16_t atlas_x, uint16_t atlas_y, uint16_t region_w, uint16_t region_h, uint16_t atlas_w, uint16_t atlas_h) {
+    return (ui_uv_region_t){
+        .offset = {
+            .x = atlas_x / (float)atlas_w,
+            .y = atlas_y / (float)atlas_h,
+        },
+        .scale = {
+            .x = region_w / (float)atlas_w,
+            .y = region_h / (float)atlas_h,
+        },
+    };
 }
 
 static void layout_block_children(ui_state_t *state, ui_element_t *element, float content_width, float content_height) {

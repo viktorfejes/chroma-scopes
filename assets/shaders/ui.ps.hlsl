@@ -4,7 +4,9 @@ SamplerState linear_sampler : register(s0);
 cbuffer PerObjectData : register(b1) {
     float2 position;
     float2 size;
-    float4 color;
+    float2 uv_offset;
+    float2 uv_scale;
+    float4 background_color;
 };
 
 struct PSInput {
@@ -13,5 +15,6 @@ struct PSInput {
 };
 
 float4 main(PSInput input) : SV_TARGET {
-    return float4(color * background_image.Sample(linear_sampler, input.uv));
+    float4 image_color = background_image.Sample(linear_sampler, input.uv);
+    return float4(background_color * (1.0 - image_color.a) + image_color);
 }

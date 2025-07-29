@@ -4,6 +4,7 @@
 #include "logger.h"
 #include "macros.h"
 #include "renderer.h"
+#include "texture.h"
 #include "ui.h"
 #include "vectorscope.h"
 #include "window.h"
@@ -16,6 +17,8 @@ static renderer_t renderer;
 static window_t window;
 static ui_state_t ui;
 static input_state_t input;
+
+static texture_t spritesheet;
 
 // TODO: implement
 typedef struct app_state {
@@ -104,6 +107,10 @@ static bool application_initialize(void) {
         return false;
     }
 
+    if (!texture_load(renderer.device, "assets/spritesheet.png", TEXTURE_FORMAT_LDR_SRGB, &spritesheet)) {
+        LOG("Failed to load test spritesheet");
+    }
+
     // Get the vectorscope texture
     texture_t *vs_tex = vectorscope_get_texture(&renderer.vectorscope);
     texture_t *wf_tex = waveform_get_texture(&renderer.waveform);
@@ -144,7 +151,7 @@ static bool application_initialize(void) {
     {
         ui_element_t el = ui_create_element();
         el.type = UI_ELEMENT_TYPE_FLEX;
-        el.width = UI_VALUE(170, UI_UNIT_PIXEL);
+        el.width = UI_VALUE(96, UI_UNIT_PIXEL);
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
         buttons = ui_insert_element(&ui, &el, header);
@@ -154,6 +161,8 @@ static bool application_initialize(void) {
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
+        el.base_style.background_image = &spritesheet;
+        el.base_style.background_uv = ui_calc_uv_from_pixels(64, 0, 32, 32, 512, 512);
         el.handle_mouse = interact_minimize;
         minimize = ui_insert_element(&ui, &el, buttons);
     }
@@ -162,6 +171,8 @@ static bool application_initialize(void) {
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){0.3f, 0.3f, 0.3f, 1.0f};
+        el.base_style.background_image = &spritesheet;
+        el.base_style.background_uv = ui_calc_uv_from_pixels(32, 0, 32, 32, 512, 512);
         el.handle_mouse = interact_restore;
         maximize = ui_insert_element(&ui, &el, buttons);
     }
@@ -170,6 +181,8 @@ static bool application_initialize(void) {
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){1.0f, 0.3f, 0.3f, 1.0f};
+        el.base_style.background_image = &spritesheet;
+        el.base_style.background_uv = ui_calc_uv_from_pixels(0, 0, 32, 32, 512, 512);
         el.handle_hover_change = test_hover;
         el.handle_mouse = interact_close;
         close = ui_insert_element(&ui, &el, buttons);

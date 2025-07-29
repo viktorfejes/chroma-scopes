@@ -22,20 +22,28 @@ struct texture_handle {
     uint32_t bpp; // bytes per pixel
 };
 
+static void *ldr_loader(const char *filename, int *w, int *h, int *c, int desired) {
+    return (void *)stbi_load(filename, w, h, c, desired);
+}
+
+static void *hdr_loader(const char *filename, int *w, int *h, int *c, int desired) {
+    return (void *)stbi_loadf(filename, w, h, c, desired);
+}
+
 static const struct texture_handle texture_handlers[] = {
     [TEXTURE_FORMAT_LDR_SRGB] = {
         .format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
-        .load = (texture_load_fn)stbi_load,
+        .load = ldr_loader,
         .bpp = 4,
     },
     [TEXTURE_FORMAT_LDR_RAW] = {
         .format = DXGI_FORMAT_R8G8B8A8_UNORM,
-        .load = (texture_load_fn)stbi_load,
+        .load = ldr_loader,
         .bpp = 4,
     },
     [TEXTURE_FORMAT_HDR_RAW] = {
         .format = DXGI_FORMAT_R32G32B32A32_FLOAT,
-        .load = (texture_load_fn)stbi_loadf,
+        .load = hdr_loader,
         .bpp = 4 * sizeof(float),
     },
 };
