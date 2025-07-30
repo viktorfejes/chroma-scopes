@@ -16,5 +16,7 @@ struct PSInput {
 
 float4 main(PSInput input) : SV_TARGET {
     float4 image_color = background_image.Sample(linear_sampler, input.uv);
-    return float4(background_color * (1.0 - image_color.a) + image_color);
+    float3 final_color = background_color.rgb * (1.0 - image_color.a) + image_color.rgb * image_color.a;
+    float final_alpha = background_color.a * (1.0 - image_color.a) + image_color.a;
+    return float4(final_color, final_alpha);
 }

@@ -31,6 +31,11 @@ bool waveform_setup(waveform_t *wf, struct renderer *renderer) {
             return false;
         }
 
+        if (!texture_create(device, &composite_tex_desc, &wf->parade_tex)) {
+            LOG("Failed to create texture for parade");
+            return false;
+        }
+
         LOG("Waveform and RGB Parade textures created");
     }
 
@@ -108,7 +113,7 @@ void waveform_render(waveform_t *wf, struct renderer *renderer, texture_t *captu
         thread_groups[2]);
     context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
 
-    // 3. Composite with overlay into final texture
+    // 2. Composite with overlay into final texture
     shader_pipeline_bind(context, &renderer->passes.wf_comp);
     context->lpVtbl->CSSetShaderResources(context, 0, 1, &wf->accum_srv);
     context->lpVtbl->ClearUnorderedAccessViewFloat(context, wf->composite_tex.uav[0], clear_color_float);
@@ -122,21 +127,29 @@ void waveform_render(waveform_t *wf, struct renderer *renderer, texture_t *captu
 }
 
 void parade_render(waveform_t *wf, struct renderer *renderer) {
-    UNUSED(wf);
-    UNUSED(renderer);
-    // shader_pipeline_bind(context, &renderer->passes.wf_comp);
-    // context->lpVtbl->CSSetShaderResources(context, 0, 1, &wf->accum_srv);
-    // context->lpVtbl->ClearUnorderedAccessViewFloat(context, wf->composite_tex.uav[0], clear_color_float);
-    // context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &wf->composite_tex.uav[0], NULL);
-    // context->lpVtbl->Dispatch(
-    //     context,
-    //     (wf->composite_tex.width + (thread_groups[0] - 1)) / thread_groups[0],
-    //     (wf->composite_tex.width + (thread_groups[1] - 1)) / thread_groups[1],
-    //     thread_groups[2]);
-    // context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
+    ID3D11DeviceContext1 *context = renderer->context;
+    float clear_color_float[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    ID3D11UnorderedAccessView *nulluav = NULL;
+    uint32_t thread_groups[] = {8, 8, 1};
+
+    shader_pipeline_bind(context, &renderer->passes.parade_comp);
+    context->lpVtbl->CSSetShaderResources(context, 0, 1, &wf->accum_srv);
+    context->lpVtbl->ClearUnorderedAccessViewFloat(context, wf->parade_tex.uav[0], clear_color_float);
+    context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &wf->parade_tex.uav[0], NULL);
+    context->lpVtbl->Dispatch(
+        context,
+        (wf->parade_tex.width + (thread_groups[0] - 1)) / thread_groups[0],
+        (wf->parade_tex.width + (thread_groups[1] - 1)) / thread_groups[1],
+        thread_groups[2]);
+    context->lpVtbl->CSSetUnorderedAccessViews(context, 0, 1, &nulluav, NULL);
 }
 
 texture_t *waveform_get_texture(waveform_t *wf) {
     assert(wf);
     return &wf->composite_tex;
+}
+
+texture_t *parade_get_texture(waveform_t *wf) {
+    assert(wf);
+    return &wf->parade_tex;
 }

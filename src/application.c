@@ -8,6 +8,7 @@
 #include "ui.h"
 #include "vectorscope.h"
 #include "window.h"
+#include <windows.h>
 
 #define TARGET_FPS 30
 #define FIXED_TIMESTEP (1.0 / TARGET_FPS)
@@ -19,6 +20,14 @@ static ui_state_t ui;
 static input_state_t input;
 
 static texture_t spritesheet;
+
+typedef struct {
+    int2_t offset;
+    window_t *target_window;
+    bool is_dragging;
+} app_drag_state_t;
+
+static app_drag_state_t drag_state = {0};
 
 // TODO: implement
 typedef struct app_state {
@@ -114,6 +123,7 @@ static bool application_initialize(void) {
     // Get the vectorscope texture
     texture_t *vs_tex = vectorscope_get_texture(&renderer.vectorscope);
     texture_t *wf_tex = waveform_get_texture(&renderer.waveform);
+    texture_t *parade_tex = parade_get_texture(&renderer.waveform);
 
     uint16_t body, header, row1, row2, tl_comp, tr_comp, bl_comp, br_comp, title, buttons,
         minimize, maximize, close;
@@ -218,6 +228,8 @@ static bool application_initialize(void) {
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f};
+        el.base_style.background_uv.offset.y += 1.0f;
+        el.base_style.background_uv.scale.y = -1.0f;
         el.base_style.background_image = vs_tex;
         el.handle_mouse = test_ui_events;
         tl_comp = ui_insert_element(&ui, &el, row1);
@@ -227,6 +239,8 @@ static bool application_initialize(void) {
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){1.0f, 1.0f, 1.0f, 1.0f};
+        el.base_style.background_uv.offset.y += 1.0f;
+        el.base_style.background_uv.scale.y = -1.0f;
         el.base_style.background_image = wf_tex;
         tr_comp = ui_insert_element(&ui, &el, row1);
     }
@@ -243,6 +257,9 @@ static bool application_initialize(void) {
         el.flex_grow = 1;
         el.height = UI_VALUE(100, UI_UNIT_PERCENT);
         el.base_style.background_color = (float4_t){1.0f, 1.0f, 0.0f, 0.1f};
+        el.base_style.background_uv.offset.y += 1.0f;
+        el.base_style.background_uv.scale.y = -1.0f;
+        el.base_style.background_image = parade_tex;
         br_comp = ui_insert_element(&ui, &el, row2);
     }
 
@@ -296,6 +313,34 @@ static void application_update(double dt) {
         }
     }
 
+    if (input_is_mouse_button_down(MOUSE_BUTTON_RIGHT)) {
+        int2_t mouse_pos = platform_get_screen_cursor_pos();
+        if (!drag_state.is_dragging) {
+            // Start dragging
+            window_t *w = window_get_from_point(mouse_pos);
+            if (w) {
+                rect_t win_rect = {0};
+                window_get_rect(w, &win_rect);
+
+                drag_state.is_dragging = true;
+                drag_state.target_window = w;
+                drag_state.offset.x = mouse_pos.x - win_rect.x;
+                drag_state.offset.y = mouse_pos.y - win_rect.y;
+            }
+        } else {
+            // Continue dragging
+            window_t *w = drag_state.target_window;
+            if (w && !window_is_maximized(w)) {
+                window_set_window_pos(w, mouse_pos.x - drag_state.offset.x, mouse_pos.y - drag_state.offset.y);
+            }
+        }
+    }
+
+    if (input_is_mouse_button_up(MOUSE_BUTTON_RIGHT)) {
+        drag_state.is_dragging = false;
+        drag_state.target_window = NULL;
+    }
+
     capture_frame(&renderer.capture, (rect_t){0, 0, 500, 500}, renderer.context, &renderer.blit_texture);
 }
 
@@ -329,8 +374,11 @@ static bool application_run(void) {
         // application_render...
         // could add interpolation for rendering as well
         renderer_begin_frame(&renderer);
+        
         vectorscope_render(&renderer.vectorscope, &renderer, &renderer.blit_texture);
         waveform_render(&renderer.waveform, &renderer, &renderer.blit_texture);
+        parade_render(&renderer.waveform, &renderer);
+
         renderer_draw_ui(&renderer, &ui, &ui.elements[0], false);
         renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);

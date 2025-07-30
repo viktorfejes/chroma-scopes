@@ -134,6 +134,40 @@ void window_set_custom_dragarea(window_t *window, rect_t area) {
     window->custom_dragbar = area;
 }
 
+window_t *window_get_from_point(int2_t point) {
+    POINT cursor_pos = {point.x, point.y};
+    HWND target_win = WindowFromPoint(cursor_pos);
+    if (target_win) return (window_t *)GetWindowLongPtr(target_win, GWLP_USERDATA);
+
+    return NULL;
+}
+
+bool window_get_rect(window_t *window, rect_t *rect) {
+    RECT win_rect = {0};
+    if (GetWindowRect(window->hwnd, &win_rect)) {
+        rect->x = win_rect.left;
+        rect->y = win_rect.top;
+        rect->width = win_rect.right;
+        rect->height = win_rect.bottom;
+        return true;
+    }
+    return false;
+}
+
+bool window_set_window_pos(window_t *window, int32_t x, int32_t y) {
+    return (bool)SetWindowPos(window->hwnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+bool window_is_maximized(window_t *window) {
+    return (bool)IsZoomed(window->hwnd);
+}
+
+int2_t window_client_to_screen(window_t *window, int2_t client_point) {
+    POINT win_point = {client_point.x, client_point.y};
+    ClientToScreen(window->hwnd, &win_point);
+    return (int2_t){win_point.x, win_point.y};
+}
+
 bool platform_initialize(void) {
     LARGE_INTEGER frequency;
     QueryPerformanceFrequency(&frequency);
@@ -178,6 +212,12 @@ double platform_get_seconds(void) {
     LARGE_INTEGER now_time;
     QueryPerformanceCounter(&now_time);
     return (double)now_time.QuadPart * seconds_per_tick;
+}
+
+int2_t platform_get_screen_cursor_pos(void) {
+    POINT p;
+    GetCursorPos(&p);
+    return (int2_t){p.x, p.y};
 }
 
 static keycode_t vk_to_keycode(WPARAM w_param) {

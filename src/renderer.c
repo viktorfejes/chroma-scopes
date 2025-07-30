@@ -984,6 +984,28 @@ static bool create_shader_pipelines(renderer_t *renderer) {
             LOG("Failed to create shader pipeline for Waveform Composite Pass");
             return false;
         }
+
+        if (!shader_create_from_file(
+                device,
+                "assets/shaders/parade_comp.cs.hlsl",
+                SHADER_STAGE_CS,
+                "main",
+                &renderer->shaders.parade_comp_cs)) {
+            LOG("Failed to create compute shader for RGB Parade Composite Pass");
+            return false;
+        }
+
+        shader_t *shaders3[] = {&renderer->shaders.parade_comp_cs};
+        if (!shader_pipeline_create(
+                device,
+                shaders3,
+                ARRAYSIZE(shaders3),
+                NULL,
+                0,
+                &renderer->passes.parade_comp)) {
+            LOG("Failed to create shader pipeline for RGB Parade Composite Pass");
+            return false;
+        }
     }
 
     // Create shader pipeline for composite pass

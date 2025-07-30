@@ -39,7 +39,7 @@ VSOutput main(uint vertex_id : SV_VertexID) {
 
     // UV
     float2 base_uv = local_pos + 0.5;
-    base_uv.y = 1.0 - base_uv.y;
+//  base_uv.y = 1.0 - base_uv.y;
     o.uv = uv_offset + base_uv * uv_scale;
     
     return o;
