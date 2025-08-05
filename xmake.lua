@@ -13,7 +13,7 @@ target("chroma-scopes")
     set_kind("binary")
     add_includedirs("libs/stb")
     add_files("src/*.c")
-    add_syslinks("d3d11", "d3dcompiler", "dxgi", "uuid", "dxguid", "shcore", "winmm")
+    add_syslinks("d3d11", "d3dcompiler", "dxgi", "uuid", "dxguid", "shcore", "winmm", "gdi32")
     -- add_cxflags("-fno-sanitize=vptr")
 
     add_defines("WINVER=0x0A00", "_WIN32_WINNT=0x0A00")

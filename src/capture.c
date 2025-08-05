@@ -2,6 +2,7 @@
 
 #include "logger.h"
 #include "macros.h"
+#include "math.h"
 #include "texture.h"
 
 #include <assert.h>
@@ -288,6 +289,21 @@ uint32_t capture_enumerate_monitors(monitor_info_t *monitors, uint32_t max_count
 
     factory->lpVtbl->Release(factory);
     return win32_monitor_count;
+}
+
+monitor_info_t *capture_find_best_monitor_for_rect(capture_t *capture, rect_t selection) {
+    monitor_info_t *m = NULL;
+    int32_t best_m_area = 0;
+
+    for (uint32_t i = 0; i < capture->monitor_count; ++i) {
+        int32_t a = rect_intersection_area(selection, capture->monitors[i].bounds);
+        if (a > best_m_area) {
+            best_m_area = a;
+            m = &capture->monitors[i];
+        }
+    }
+
+    return m;
 }
 
 static BOOL CALLBACK monitor_enum_proc(HMONITOR hmon, HDC hdc, LPRECT rect, LPARAM data) {

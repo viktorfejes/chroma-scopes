@@ -17,3 +17,7 @@
 #ifndef CLAMP
 #define CLAMP(value, min, max) MIN((max), MAX((min), (value)))
 #endif
+
+#ifndef ABS
+#define ABS(x) ((x) < 0 ? -(x) : (x))
+#endif

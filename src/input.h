@@ -23,6 +23,7 @@ typedef enum keycode {
     KEY_E,
     KEY_R,
     KEY_P,
+    KEY_N,
     KEY_COUNT
 } keycode_t;
 

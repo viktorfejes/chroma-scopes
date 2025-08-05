@@ -1,5 +1,6 @@
 #include "application.h"
 
+#include "capture.h"
 #include "input.h"
 #include "logger.h"
 #include "macros.h"
@@ -8,18 +9,27 @@
 #include "ui.h"
 #include "vectorscope.h"
 #include "window.h"
-#include <windows.h>
 
 #define TARGET_FPS 30
 #define FIXED_TIMESTEP (1.0 / TARGET_FPS)
 #define MAX_FRAME_TIME 0.25 // 250ms max
 
+static platform_state_t platform;
 static renderer_t renderer;
 static window_t window;
 static ui_state_t ui;
 static input_state_t input;
 
 static texture_t spritesheet;
+
+typedef struct overlay_state {
+    window_t window;
+    rect_t selection;
+    bool is_active;
+    bool is_dragging;
+} overlay_state_t;
+
+static overlay_state_t overlay_state = {0};
 
 typedef struct {
     int2_t offset;
@@ -87,14 +97,28 @@ static bool application_initialize(void) {
     LOG("Application is initializing");
 
     // Create the platform -- there is not a lot for this app for now, but we need it
-    if (!platform_initialize()) {
+    if (!platform_initialize(&platform)) {
         LOG("Failed to initialize platform layer");
         return false;
     }
 
     // Create the window (we'll probably only ever have one, unless...)
-    if (!window_create("Chroma Scopes", 1200, 710, &window)) {
+    window_create_info_t wc = {
+        .x = 0,
+        .y = 0,
+        .width = 1200,
+        .height = 710,
+        .title = "Chroma Scopes",
+        .flags = WINDOW_FLAG_BORDERLESS,
+    };
+    if (!window_create(&platform, &wc, &window)) {
         LOG("Couldn't create window");
+        return false;
+    }
+
+    // Create the overlay window
+    if (!window_create_overlay(&platform, &overlay_state.window)) {
+        LOG("Couldn't create overlay window");
         return false;
     }
 
@@ -341,6 +365,78 @@ static void application_update(double dt) {
         drag_state.target_window = NULL;
     }
 
+    if (input_is_key_down(KEY_CTRL) && input_is_key_pressed(KEY_N)) {
+        LOG("Trying to show Overlay Window...");
+        window_overlay_show(&overlay_state.window);
+
+        // // TODO: save this out so I don't have to recreate every time (I mean the info)
+        // window_create_info_t wc = {
+        //     .x = 0,
+        //     .y = 0,
+        //     .title = "Chroma Scopes - Overlay",
+        //     .flags = WINDOW_FLAG_BORDERLESS |
+        //              WINDOW_FLAG_ALWAYS_ON_TOP |
+        //              WINDOW_FLAG_MONITOR_SIZE |
+        //              WINDOW_FLAG_TRANSPARENT |
+        //              WINDOW_FLAG_NO_TASKBAR_ICON,
+        // };
+        //
+        // // Create new window for overlay
+        // if (window_create(&platform, &wc, &overlay_state.window)) {
+        //     // Create swapchain for overlay
+        //     if (renderer_overlay_swapchain_create(&renderer, &overlay_state.window)) {
+        //         overlay_state.is_active = true;
+        //         overlay_state.is_dragging = false;
+        //     } else {
+        //         LOG("Couldn't create swapchain for overlay window");
+        //     }
+        // }
+    }
+
+    // if (overlay_state.is_active && input_is_mouse_button_down(MOUSE_BUTTON_LEFT)) {
+    //     int2_t mouse_pos = input_mouse_get_pos();
+    //
+    //     if (!overlay_state.is_dragging) {
+    //         overlay_state.is_dragging = true;
+    //
+    //         overlay_state.selection.x = mouse_pos.x;
+    //         overlay_state.selection.y = mouse_pos.y;
+    //     } else {
+    //         overlay_state.selection.width = mouse_pos.x - overlay_state.selection.x;
+    //         overlay_state.selection.height = mouse_pos.y - overlay_state.selection.y;
+    //     }
+    // }
+    //
+    // if (overlay_state.is_active && input_was_mouse_button_down(MOUSE_BUTTON_LEFT)) {
+    //     overlay_state.is_dragging = false;
+    //
+    //     // Need to normalize the selection rectangle in case we were selecting the other way
+    //     rect_t norm_selection = rect_normalize(overlay_state.selection);
+    //
+    //     if (norm_selection.width > 10 && norm_selection.height > 10) {
+    //         overlay_state.is_active = false;
+    //
+    //         monitor_info_t *m = capture_find_best_monitor_for_rect(&renderer.capture, norm_selection);
+    //         if (m) {
+    //             LOG("Selected monitor: (%ld, %ld) - (%ld, %ld)",
+    //                 m->bounds.x, m->bounds.y,
+    //                 m->bounds.width, m->bounds.height);
+    //
+    //             // Update capture monitor
+    //             capture_set_monitor(&renderer.capture, renderer.device, m->id);
+    //             // TODO: Update capture area as well!
+    //         } else {
+    //             LOG("No monitor matched the selection");
+    //         }
+    //
+    //         // Free swapchain
+    //         renderer_overlay_swapchain_destroy(&renderer);
+    //
+    //         // Destroy the win api window
+    //         window_destroy(&overlay_state.window);
+    //     }
+    // }
+
     capture_frame(&renderer.capture, (rect_t){0, 0, 500, 500}, renderer.context, &renderer.blit_texture);
 }
 
@@ -350,7 +446,8 @@ static bool application_run(void) {
     double accumulator = 0.0;
 
     while (!window_should_close(&window)) {
-        window_proc_messages();
+        window_proc_messages(&window);
+        window_proc_messages(&overlay_state.window);
 
         double current_time = platform_get_seconds();
         double elapsed = current_time - last_time;
@@ -374,7 +471,7 @@ static bool application_run(void) {
         // application_render...
         // could add interpolation for rendering as well
         renderer_begin_frame(&renderer);
-        
+
         vectorscope_render(&renderer.vectorscope, &renderer, &renderer.blit_texture);
         waveform_render(&renderer.waveform, &renderer, &renderer.blit_texture);
         parade_render(&renderer.waveform, &renderer);
@@ -382,6 +479,12 @@ static bool application_run(void) {
         renderer_draw_ui(&renderer, &ui, &ui.elements[0], false);
         renderer_draw_composite(&renderer);
         renderer_end_frame(&renderer);
+
+        // When we have the overlay window active, we'll draw that
+        // if (overlay_state.is_active) {
+        //     renderer_overlay_begin_frame(&renderer);
+        //     renderer_overlay_end_frame(&renderer);
+        // }
 
         // Limit FPS
         double frame_time = platform_get_seconds() - current_time;

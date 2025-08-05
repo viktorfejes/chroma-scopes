@@ -84,6 +84,7 @@ typedef struct renderer {
     ID3D11DeviceContext1 *context;
     D3D_FEATURE_LEVEL feature_level;
     swapchain_t swapchain;
+    swapchain_t overlay_swapchain;
     ID3DUserDefinedAnnotation *annotation;
 
     capture_t capture;
@@ -119,6 +120,12 @@ bool renderer_initialize(struct window *window, renderer_t *out_renderer);
 void renderer_terminate(renderer_t *renderer);
 void renderer_begin_frame(renderer_t *renderer);
 void renderer_end_frame(renderer_t *renderer);
+
+bool renderer_overlay_swapchain_create(renderer_t *renderer, struct window *window);
+void renderer_overlay_swapchain_destroy(renderer_t *renderer);
+void renderer_overlay_begin_frame(renderer_t *renderer);
+void renderer_draw_overlay(renderer_t *renderer);
+void renderer_overlay_end_frame(renderer_t *renderer);
 
 void renderer_draw_scopes(renderer_t *renderer);
 void renderer_calculate_vectorscope(renderer_t *renderer, const texture_t* in_texture, texture_t *out_texture);

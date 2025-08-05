@@ -303,6 +303,33 @@ void renderer_end_frame(renderer_t *renderer) {
     renderer->swapchain.swapchain->lpVtbl->Present(renderer->swapchain.swapchain, 1, 0);
 }
 
+bool renderer_overlay_swapchain_create(renderer_t *renderer, struct window *window) {
+    renderer->overlay_swapchain.texture = (texture_t *)malloc(sizeof(texture_t));
+    memset(renderer->overlay_swapchain.texture, 0, sizeof(texture_t));
+    if (!create_swapchain(renderer->device, window->hwnd, renderer->overlay_swapchain.texture, &renderer->overlay_swapchain.swapchain)) {
+        return false;
+    }
+
+    return true;
+}
+
+void renderer_overlay_swapchain_destroy(renderer_t *renderer) {
+    destroy_swapchain(&renderer->overlay_swapchain);
+}
+
+void renderer_overlay_begin_frame(renderer_t *renderer) {
+    float clear_color[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // Fully transparent black
+    renderer->context->lpVtbl->ClearRenderTargetView(renderer->context, renderer->overlay_swapchain.texture->rtv[0], clear_color);
+}
+
+void renderer_draw_overlay(renderer_t *renderer) {
+    UNUSED(renderer);
+}
+
+void renderer_overlay_end_frame(renderer_t *renderer) {
+    renderer->overlay_swapchain.swapchain->lpVtbl->Present(renderer->overlay_swapchain.swapchain, 1, 0);
+}
+
 void check_d3d11_debug_messages(ID3D11Device *device) {
 #ifdef _DEBUG
     ID3D11InfoQueue *info_queue = NULL;

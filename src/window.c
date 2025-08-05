@@ -2,54 +2,113 @@
 
 #include "input.h"
 #include "logger.h"
+#include "macros.h"
 
 #include <assert.h>
 #include <shellscalingapi.h>
 #include <windows.h>
+#include <wingdi.h>
 
 #define DEFAULT_WIN_CLASS_NAME L"DefaultWinClassName"
+#define OVERLAY_WIN_CLASS_NAME L"OverlayWinClassName"
+
 #define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
+
+static HBITMAP overlay_screenshot = NULL;
 
 static double seconds_per_tick; // 1.0 / frequency (precomputed)
 
 static keycode_t vk_to_keycode(WPARAM w_param);
 static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param);
+static LRESULT CALLBACK winproc_overlay(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param);
 static BOOL window_resizing(window_t *window, WPARAM w_param, LPARAM l_param);
+static void capture_screen_for_overlay(void);
 
-bool window_create(const char *title, uint16_t width, uint16_t height, window_t *out_window) {
-    assert(out_window && "Out window cannot be NULL");
+bool platform_initialize(platform_state_t *state) {
+    state->h_instance = GetModuleHandle(NULL);
 
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    HINSTANCE h_instance = GetModuleHandle(NULL);
+    // Register main window class
+    {
+        WNDCLASSEXW wc = {
+            .cbSize = sizeof(WNDCLASSEXW),
+            .style = CS_HREDRAW | CS_VREDRAW,
+            .lpfnWndProc = winproc,
+            .hInstance = state->h_instance,
+            .hIcon = LoadIcon(NULL, IDI_APPLICATION),
+            .hCursor = LoadCursor(NULL, IDC_ARROW),
+            .lpszClassName = DEFAULT_WIN_CLASS_NAME,
+        };
 
-    // Register a window class
-    WNDCLASSEXW wc = {
-        .cbSize = sizeof(WNDCLASSEXW),
-        .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-        .lpfnWndProc = winproc,
-        .hInstance = h_instance,
-        .hIcon = LoadIcon(NULL, IDI_APPLICATION),
-        .hCursor = LoadCursor(NULL, IDC_ARROW),
-        .lpszClassName = DEFAULT_WIN_CLASS_NAME,
-    };
-
-    if (!RegisterClassExW(&wc)) {
-        LOG("Couldn't register default window class");
-        return false;
+        if (!RegisterClassExW(&wc)) {
+            LOG("Couldn't register default window class");
+            return false;
+        }
     }
 
-    DWORD w_style = WS_POPUP | WS_VISIBLE;
-    DWORD w_ex_style = WS_EX_APPWINDOW;
+    // Register overlay window class
+    {
+        WNDCLASSEXW wc = {
+            .cbSize = sizeof(WNDCLASSEXW),
+            .style = CS_HREDRAW | CS_VREDRAW,
+            .lpfnWndProc = winproc_overlay,
+            .hInstance = state->h_instance,
+            .hCursor = LoadCursor(NULL, IDC_CROSS),
+            .lpszClassName = OVERLAY_WIN_CLASS_NAME,
+            .hbrBackground = NULL,
+        };
 
-    // Adjust window size to account for decoration
-    RECT wr = {.left = 0, .top = 0, .right = (LONG)width, .bottom = (LONG)height};
-    AdjustWindowRect(&wr, w_style, FALSE);
+        if (!RegisterClassExW(&wc)) {
+            LOG("Couldn't register overlay window class");
+            return false;
+        }
+    }
+
+    LARGE_INTEGER frequency;
+    QueryPerformanceFrequency(&frequency);
+    seconds_per_tick = 1.0 / (double)frequency.QuadPart;
+
+    return true;
+}
+
+void platform_terminate(platform_state_t *state) {
+    UNUSED(state);
+}
+
+bool window_create(platform_state_t *state, window_create_info_t *info, window_t *out_window) {
+    assert(state);
+    assert(info);
+    assert(out_window && "Out window cannot be NULL");
+
+    DWORD w_style = (info->flags & WINDOW_FLAG_BORDERLESS) ? WS_POPUP : WS_OVERLAPPEDWINDOW;
+    DWORD w_ex_style = (info->flags & WINDOW_FLAG_NO_TASKBAR_ICON) ? WS_EX_TOOLWINDOW : WS_EX_APPWINDOW;
+
+    if (info->flags & WINDOW_FLAG_ALWAYS_ON_TOP) w_ex_style |= WS_EX_TOPMOST;
+    if (info->flags & WINDOW_FLAG_TRANSPARENT) w_ex_style |= WS_EX_LAYERED;
+
+    int32_t x = info->x;
+    int32_t y = info->y;
+    uint32_t w = info->width;
+    uint32_t h = info->height;
+
+    if (info->flags & WINDOW_FLAG_MONITOR_SIZE) {
+        x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    } else {
+        // Adjust window size to account for decoration
+        RECT wr = {.left = 0, .top = 0, .right = (LONG)w, .bottom = (LONG)h};
+        AdjustWindowRect(&wr, w_style, FALSE);
+        w = wr.right - wr.left;
+        h = wr.bottom - wr.top;
+    }
 
     // Convert title to wide char from char
     wchar_t title_wide[256];
-    MultiByteToWideChar(CP_UTF8, 0, title, -1, title_wide, sizeof(title_wide) / sizeof(wchar_t));
+    MultiByteToWideChar(CP_UTF8, 0, info->title, -1, title_wide, sizeof(title_wide) / sizeof(wchar_t));
 
     // Create the window itself
     out_window->hwnd = CreateWindowExW(
@@ -57,12 +116,11 @@ bool window_create(const char *title, uint16_t width, uint16_t height, window_t 
         DEFAULT_WIN_CLASS_NAME,
         title_wide,
         w_style,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        wr.right - wr.left,
-        wr.bottom - wr.top,
+        x, y,
+        w, h,
         NULL,
         NULL,
-        h_instance,
+        state->h_instance,
         out_window);
 
     if (!out_window->hwnd) {
@@ -70,11 +128,17 @@ bool window_create(const char *title, uint16_t width, uint16_t height, window_t 
         return false;
     }
 
+    // For transparent windows we set the layered attributes
+    if (info->flags & WINDOW_FLAG_TRANSPARENT) {
+        SetLayeredWindowAttributes(out_window->hwnd, 0, 128, LWA_ALPHA);
+    }
+
     // Fill out member variables
-    out_window->width = width;
-    out_window->height = height;
-    out_window->x = CW_USEDEFAULT;
-    out_window->y = CW_USEDEFAULT;
+    out_window->x = x;
+    out_window->y = y;
+    out_window->width = w;
+    out_window->height = h;
+    out_window->flags = info->flags;
 
     // Set boolean to false, meaning it's currently open
     out_window->should_close = false;
@@ -85,6 +149,58 @@ bool window_create(const char *title, uint16_t width, uint16_t height, window_t 
     return true;
 }
 
+bool window_create_overlay(platform_state_t *state, window_t *out_window) {
+    assert(state);
+    assert(out_window && "Out window cannot be NULL");
+
+    DWORD w_style = WS_POPUP;
+    DWORD w_ex_style = WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
+
+    int32_t x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int32_t y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    uint32_t w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    uint32_t h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    // Create the window itself
+    out_window->hwnd = CreateWindowExW(
+        w_ex_style,
+        OVERLAY_WIN_CLASS_NAME,
+        L"Chroma Scopes - Overlay",
+        w_style,
+        0, 0,
+        0, 0,
+        NULL,
+        NULL,
+        state->h_instance,
+        out_window);
+
+    if (!out_window->hwnd) {
+        LOG("Window creation failed.");
+        return false;
+    }
+
+    // Fill out member variables
+    out_window->x = x;
+    out_window->y = y;
+    out_window->width = w;
+    out_window->height = h;
+    out_window->flags = WINDOW_FLAG_TRANSPARENT | WINDOW_FLAG_NO_TASKBAR_ICON | WINDOW_FLAG_MONITOR_SIZE | WINDOW_FLAG_ALWAYS_ON_TOP | WINDOW_FLAG_BORDERLESS;
+
+    // Set boolean to false, meaning it's currently open
+    out_window->should_close = false;
+
+    return true;
+}
+
+void window_overlay_show(window_t *window) {
+    capture_screen_for_overlay();
+
+    SetWindowPos(window->hwnd, HWND_TOP, window->x, window->y, window->width, window->height, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    ShowWindow(window->hwnd, SW_SHOW);
+    SetForegroundWindow(window->hwnd);
+    UpdateWindow(window->hwnd);
+}
+
 void window_destroy(window_t *window) {
     assert(window && "Window pointer MUST NOT be NULL");
     if (window->hwnd) {
@@ -93,9 +209,9 @@ void window_destroy(window_t *window) {
     window->hwnd = NULL;
 }
 
-void window_proc_messages(void) {
+void window_proc_messages(window_t *window) {
     MSG msg = {0};
-    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+    while (PeekMessageW(&msg, window->hwnd, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
@@ -166,14 +282,6 @@ int2_t window_client_to_screen(window_t *window, int2_t client_point) {
     POINT win_point = {client_point.x, client_point.y};
     ClientToScreen(window->hwnd, &win_point);
     return (int2_t){win_point.x, win_point.y};
-}
-
-bool platform_initialize(void) {
-    LARGE_INTEGER frequency;
-    QueryPerformanceFrequency(&frequency);
-    seconds_per_tick = 1.0 / (double)frequency.QuadPart;
-
-    return true;
 }
 
 void platform_sleep(uint64_t ms) {
@@ -254,6 +362,8 @@ static keycode_t vk_to_keycode(WPARAM w_param) {
             return KEY_R;
         case 'P':
             return KEY_P;
+        case 'N':
+            return KEY_N;
         default:
             return KEY_UNKNOWN;
     }
@@ -409,4 +519,158 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
     }
 
     return DefWindowProcW(hwnd, msg, w_param, l_param);
+}
+
+bool g_is_dragging = false;
+POINT g_start_point = {0, 0};
+POINT g_end_point = {0, 0};
+RECT g_current_rect = {0, 0, 0, 0};
+
+static LRESULT CALLBACK winproc_overlay(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param) {
+    switch (msg) {
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+
+            RECT client_rect;
+            GetClientRect(hwnd, &client_rect);
+
+            HDC mem_dc = CreateCompatibleDC(hdc);
+            HBITMAP screenshot_cpy = CopyImage(overlay_screenshot, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+            SelectObject(mem_dc, screenshot_cpy);
+
+            // Draw screenshot
+            BitBlt(hdc, 0, 0, client_rect.right, client_rect.bottom, mem_dc, 0, 0, SRCCOPY);
+
+            HDC alpha_dc = CreateCompatibleDC(hdc);
+            UCHAR bits[] = {0, 0, 0, 128};
+            HBITMAP alpha_bmp = CreateBitmap(1, 1, 1, 32, bits);
+            SelectObject(alpha_dc, alpha_bmp);
+
+            BLENDFUNCTION blend_fn = {AC_SRC_OVER, 0, 128, AC_SRC_ALPHA};
+
+            if (g_is_dragging && (g_start_point.x != g_end_point.x && g_start_point.y != g_end_point.y)) {
+                int left = MIN(g_start_point.x, g_end_point.x);
+                int top = MIN(g_start_point.y, g_end_point.y);
+                int right = MAX(g_start_point.x, g_end_point.x);
+                int bottom = MAX(g_start_point.y, g_end_point.y);
+
+                if (top > 0) {
+                    GdiAlphaBlend(hdc, 0, 0, client_rect.right, top, alpha_dc, 0, 0, 1, 1, blend_fn);
+                }
+
+                if (bottom < client_rect.bottom) {
+                    GdiAlphaBlend(hdc, 0, bottom, client_rect.right, client_rect.bottom, alpha_dc, 0, 0, 1, 1, blend_fn);
+                }
+
+                if (left > 0) {
+                    GdiAlphaBlend(hdc, 0, top, left, bottom - top, alpha_dc, 0, 0, 1, 1, blend_fn);
+                }
+
+                if (right < client_rect.right) {
+                    GdiAlphaBlend(hdc, right, top, client_rect.right - right, bottom - top, alpha_dc, 0, 0, 1, 1, blend_fn);
+                }
+
+                HPEN rect_pen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
+                HPEN old_pen = (HPEN)SelectObject(hdc, rect_pen);
+                HBRUSH old_brush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+
+                Rectangle(hdc, left, top, right, bottom);
+
+                SelectObject(hdc, old_pen);
+                SelectObject(hdc, old_brush);
+                DeleteObject(rect_pen);
+            } else {
+                GdiAlphaBlend(hdc, 0, 0, client_rect.right, client_rect.bottom, alpha_dc, 0, 0, 1, 1, blend_fn);
+            }
+
+            // Cleanup
+            DeleteObject(alpha_bmp);
+            DeleteDC(alpha_dc);
+            DeleteObject(screenshot_cpy);
+            DeleteDC(mem_dc);
+
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        case WM_LBUTTONDOWN: {
+            SetCapture(hwnd);
+
+            if (!g_is_dragging) {
+                g_is_dragging = true;
+                g_start_point.x = GET_X_LPARAM(l_param);
+                g_start_point.y = GET_Y_LPARAM(l_param);
+
+                LOG("Started dragging on Overlay Window at (%d, %d)", g_start_point.x, g_start_point.y);
+            }
+
+            return 0;
+        }
+
+        case WM_MOUSEMOVE: {
+            if (g_is_dragging) {
+                g_end_point.x = GET_X_LPARAM(l_param);
+                g_end_point.y = GET_Y_LPARAM(l_param);
+
+                InvalidateRect(hwnd, NULL, FALSE);
+                UpdateWindow(hwnd);
+            }
+
+            return 0;
+        }
+
+        case WM_LBUTTONUP: {
+            g_is_dragging = false;
+            ReleaseCapture();
+
+            g_start_point = (POINT){0, 0};
+            g_end_point = (POINT){0, 0};
+            // InvalidateRect(hwnd, NULL, TRUE);
+            // UpdateWindow(hwnd);
+
+            ShowWindow(hwnd, SW_HIDE);
+
+            return 0;
+        }
+
+        case WM_KEYDOWN: {
+            if (w_param == VK_ESCAPE) {
+                ShowWindow(hwnd, SW_HIDE);
+            }
+            return 0;
+        }
+
+        case WM_DESTROY: {
+            PostQuitMessage(0);
+            return 0;
+        }
+
+        default:
+            return DefWindowProcW(hwnd, msg, w_param, l_param);
+    }
+}
+
+static void capture_screen_for_overlay(void) {
+    if (overlay_screenshot) {
+        DeleteObject(overlay_screenshot);
+        overlay_screenshot = NULL;
+    }
+
+    int32_t x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int32_t y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    uint32_t w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    uint32_t h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    HDC screen_dc = GetDC(NULL);
+    HDC mem_dc = CreateCompatibleDC(screen_dc);
+    HBITMAP bmp = CreateCompatibleBitmap(screen_dc, w, h);
+    SelectObject(mem_dc, bmp);
+
+    BitBlt(mem_dc, 0, 0, w, h, screen_dc, x, y, SRCCOPY);
+
+    ReleaseDC(NULL, screen_dc);
+    DeleteDC(mem_dc);
+
+    overlay_screenshot = bmp;
 }

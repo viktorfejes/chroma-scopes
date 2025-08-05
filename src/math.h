@@ -37,5 +37,7 @@ float4x4_t mat_orthographic_lh(float view_width, float view_height, float near_z
 float4x4_t mat_orthographic_offcenter_lh(float left, float right, float bottom, float top, float near_z, float far_z);
 
 bool rect_contains(rect_t rect, float2_t point);
+int32_t rect_intersection_area(rect_t a, rect_t b);
+rect_t rect_normalize(rect_t rect);
 float2_t rect_to_position(rect_t rect);
 float2_t rect_to_size(rect_t rect);

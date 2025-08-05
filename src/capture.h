@@ -46,3 +46,4 @@ void capture_terminate(capture_t *capture);
 bool capture_frame(capture_t *capture, rect_t area, ID3D11DeviceContext1 *context, struct texture *out_texture);
 bool capture_set_monitor(capture_t *capture, ID3D11Device1 *device, uint8_t monitor_id);
 uint32_t capture_enumerate_monitors(monitor_info_t *monitors, uint32_t max_count);
+monitor_info_t *capture_find_best_monitor_for_rect(capture_t *capture, rect_t selection);
