@@ -21,3 +21,8 @@
 #ifndef ABS
 #define ABS(x) ((x) < 0 ? -(x) : (x))
 #endif
+
+#define HAS_BIT(x, bit)    (((x) & (bit)) != 0)
+#define SET_BIT(x, bit)    ((x) |= (bit))
+#define CLEAR_BIT(x, bit)  ((x) &= ~(bit))
+

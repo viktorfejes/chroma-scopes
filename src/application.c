@@ -39,15 +39,24 @@ typedef struct {
 
 static app_drag_state_t drag_state = {0};
 
+typedef enum app_mode {
+    APP_MODE_NORMAL,
+    APP_MODE_OVERLAY,
+} app_mode_t;
+
 // TODO: implement
 typedef struct app_state {
+    app_mode_t mode;
+
     /* System states */
+    platform_state_t *platform;
     renderer_t *renderer;
-    window_t *window;
+    capture_t *capture;
     ui_state_t *ui;
     input_state_t *input;
 
     /* Game loop fields */
+    double last_time;
 } app_state_t;
 
 static bool application_initialize(void);
