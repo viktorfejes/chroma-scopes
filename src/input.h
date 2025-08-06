@@ -8,6 +8,7 @@
 typedef enum keycode {
     KEY_UNKNOWN = 0,
     KEY_CTRL,
+    KEY_BACKSPACE,
     KEY_0,
     KEY_1,
     KEY_2,

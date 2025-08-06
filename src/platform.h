@@ -43,3 +43,4 @@ void platform_destroy_window(platform_state_t *state, platform_window_t *window)
 bool platform_window_should_close(platform_window_t *window);
 void platform_show_window(platform_window_t *window);
 void platform_hide_window(platform_window_t *window);
+void platform_close_window(platform_window_t *window);
