@@ -5,6 +5,7 @@
 #include "macros.h"
 
 #include <assert.h>
+#include <stdio.h>
 
 #define WIN32_LEAN_MEAN
 #include <windows.h>
@@ -236,6 +237,58 @@ void platform_close_window(platform_window_t *window) {
     }
 }
 
+bool platform_dynlib_load(const char *name, platform_dynlib_t *dynlib) {
+    assert(name);
+    assert(dynlib);
+
+    static const char *paths[] = {
+        "",
+        "./",
+        "C:/Windows/System32/"};
+    const size_t path_count = sizeof(paths) / sizeof(paths[0]);
+
+    memset(dynlib, 0, sizeof(platform_dynlib_t));
+    char fullpath[512] = {0};
+
+    HMODULE handle = NULL;
+    for (size_t i = 0; i < path_count; ++i) {
+        snprintf(fullpath, sizeof(fullpath), "%s%s%s", paths[i], name, ".dll");
+        handle = LoadLibraryA(fullpath);
+        if (handle) {
+            dynlib->handle = handle;
+            return true;
+        }
+    }
+
+    // Unsuccessful
+    DWORD err = GetLastError();
+    LOG("Failed to load library: %s (Win32 Error %lu)", name, err);
+
+    return false;
+}
+
+bool platform_dynlib_unload(platform_dynlib_t *dynlib) {
+    if (dynlib && dynlib->handle) {
+        BOOL res = FreeLibrary((HMODULE)dynlib->handle);
+        if (!res) return false;
+
+        dynlib->handle = NULL;
+        memset(dynlib, 0, sizeof(platform_dynlib_t));
+
+        return true;
+    }
+
+    return false;
+}
+
+void *platform_dynlib_get_symbol(platform_dynlib_t *dynlib, const char *symbol) {
+    assert(dynlib);
+    assert(symbol);
+    assert(dynlib->handle);
+
+    return (void *)GetProcAddress((HMODULE)dynlib->handle, symbol);
+}
+
 static void keycodes_init(void) {
     vk_to_keycode[VK_BACK] = KEY_BACKSPACE;
     vk_to_keycode[VK_CONTROL] = KEY_CTRL;
@@ -253,6 +306,11 @@ static void keycodes_init(void) {
     vk_to_keycode['W'] = KEY_W;
     vk_to_keycode['E'] = KEY_E;
     vk_to_keycode['R'] = KEY_R;
+    vk_to_keycode['T'] = KEY_T;
+    vk_to_keycode['Y'] = KEY_Y;
+    vk_to_keycode['U'] = KEY_U;
+    vk_to_keycode['I'] = KEY_I;
+    vk_to_keycode['O'] = KEY_O;
     vk_to_keycode['P'] = KEY_P;
     vk_to_keycode['N'] = KEY_N;
 }
@@ -304,6 +362,18 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
             return 0;
         }
 
+        case WM_MOVE: {
+            window->x = LOWORD(l_param);
+            window->y = HIWORD(l_param);
+        } break;
+
+        case WM_SIZE: {
+            window->width = LOWORD(l_param);
+            window->height = HIWORD(l_param);
+            // TODO: fire event so others can pick it up
+            // TODO: add control for aspect ratio lock
+        } break;
+
         case WM_LBUTTONDOWN:
         case WM_LBUTTONUP:
         case WM_RBUTTONDOWN:
@@ -335,30 +405,24 @@ static LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_pa
             if (mb < MOUSE_BUTTON_COUNT) {
                 input_process_mouse_button(mb, pressed);
             }
+        } break;
 
-            return 0;
-        };
-
+        case WM_SYSKEYDOWN:
         case WM_KEYDOWN: {
             input_process_key(vk_to_keycode[w_param], true);
-            return 0;
-        }
+        } break;
 
+        case WM_SYSKEYUP:
         case WM_KEYUP: {
             input_process_key(vk_to_keycode[w_param], false);
-            return 0;
+            break;
         }
 
         case WM_CLOSE:
             // CLEAR_BIT(window->state, WINDOW_OPEN);
             window->state = 0;
-            return 0;
-
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            return 0;
-
-        default:
-            return DefWindowProcW(hwnd, msg, w_param, l_param);
+            break;
     }
+
+    return DefWindowProcW(hwnd, msg, w_param, l_param);
 }

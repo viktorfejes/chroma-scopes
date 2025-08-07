@@ -6,6 +6,10 @@
 struct platform_internal_state;
 typedef struct platform_window platform_window_t;
 
+typedef struct platform_dynlib {
+    void *handle;
+} platform_dynlib_t;
+
 typedef enum platform_window_flag {
     PLATFORM_WINDOW_FLAG_NONE = 0,
     PLATFORM_WINDOW_FLAG_HIDDEN = 1 << 0,
@@ -27,7 +31,6 @@ typedef struct platform_window_desc {
 
 typedef struct platform_state {
     struct platform_internal_state *internal_state;
-
     double tick;
 } platform_state_t;
 
@@ -44,3 +47,7 @@ bool platform_window_should_close(platform_window_t *window);
 void platform_show_window(platform_window_t *window);
 void platform_hide_window(platform_window_t *window);
 void platform_close_window(platform_window_t *window);
+
+bool platform_dynlib_load(const char *name, platform_dynlib_t *dynlib);
+bool platform_dynlib_unload(platform_dynlib_t *dynlib);
+void *platform_dynlib_get_symbol(platform_dynlib_t *dynlib, const char *symbol);

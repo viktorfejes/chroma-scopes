@@ -22,3 +22,6 @@ target("chroma-scopes")
     end
 
     set_rundir(os.projectdir())
+
+target("plugin.d3d11")
+    set_kind("shared")

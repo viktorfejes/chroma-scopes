@@ -23,6 +23,11 @@ typedef enum keycode {
     KEY_W,
     KEY_E,
     KEY_R,
+    KEY_T,
+    KEY_Y,
+    KEY_U,
+    KEY_I,
+    KEY_O,
     KEY_P,
     KEY_N,
     KEY_COUNT
@@ -56,7 +61,7 @@ typedef struct input_state {
 } input_state_t;
 
 bool input_initialize(input_state_t *state);
-void input_swap_buffers(input_state_t* state);
+void input_swap_buffers(input_state_t *state);
 
 void input_process_key(keycode_t key_code, bool pressed);
 void input_process_mouse_button(mousebutton_t button, bool pressed);
@@ -77,7 +82,7 @@ bool input_was_mouse_button_up(mousebutton_t button);
 bool input_is_mouse_button_pressed(mousebutton_t button);
 bool input_is_mouse_button_released(mousebutton_t button);
 
-int2_t input_mouse_get_pos(void); 
+int2_t input_mouse_get_pos(void);
 int16_t input_mouse_get_x(void);
 int16_t input_mouse_get_y(void);
 int16_t input_mouse_get_delta_x(void);
