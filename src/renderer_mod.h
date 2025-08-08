@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi.h"
+#include "vri/vri.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -8,10 +8,8 @@
 struct platform_dynlib;
 
 typedef struct renderer_state {
-    rhi_device_t *device;
-    rhi_queue_t *queue;
-
-    rhi_api_t rhi;
+    vri_device_t *device;
+    vri_queue_t *queue;
 } renderer_state_t;
 
-bool renderer_initialize(size_t *memory_requirement, renderer_state_t *state, struct platform_dynlib *backend_plugin);
+bool renderer_initialize(size_t *memory_requirement, renderer_state_t *state, vri_api_t api);
