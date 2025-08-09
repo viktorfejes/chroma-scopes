@@ -16,9 +16,6 @@ typedef struct {
     vri_d3d11_device_t *parent_device;
 } vri_d3d11_context_t;
 
-#define IID_PPV_ARGS_C(type, ppType) \
-    &IID_##type, (void **)(ppType)
-
 static void fill_vtable_core(vri_core_interface_t *vtable);
 
 bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
@@ -165,5 +162,5 @@ void d3d11_device_destroy(vri_device_t *device) {
 }
 
 static void fill_vtable_core(vri_core_interface_t *vtable) {
-    vtable->destroy_device = d3d11_device_destroy;
+    vtable->device_destroy = d3d11_device_destroy;
 }

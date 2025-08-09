@@ -26,3 +26,6 @@
 #define SET_BIT(x, bit)    ((x) |= (bit))
 #define CLEAR_BIT(x, bit)  ((x) &= ~(bit))
 
+#ifndef ARRAY_LENGTH
+#define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
+#endif
