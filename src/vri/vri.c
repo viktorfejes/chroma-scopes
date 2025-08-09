@@ -191,24 +191,24 @@ bool vri_enumerate_adapters(vri_adapter_desc_t *adapter_descs, uint32_t *adapter
     return result;
 }
 
-bool vri_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
+bool vri_device_create(const vri_device_desc_t *device_desc, vri_device_t **device) {
     bool result = false;
 
-    vri_device_desc_t mod_desc = *desc;
+    vri_device_desc_t mod_desc = *device_desc;
     setup_callbacks(&mod_desc);
 
 #if VRI_ENABLE_NONE_SUPPORT
-    if (desc->api == VRI_API_NONE)
+    if (mod_desc.api == VRI_API_NONE)
         result = none_device_create(&mod_desc, device);
 #endif
 
 #if VRI_ENABLE_D3D11_SUPPORT
-    if (desc->api == VRI_API_D3D11)
+    if (mod_desc.api == VRI_API_D3D11)
         result = d3d11_device_create(&mod_desc, device);
 #endif
 
 #if VRI_ENABLE_VK_SUPPORT
-    if (desc->api == VRI_API_VULKAN)
+    if (mod_desc.api == VRI_API_VULKAN)
         result = vk_device_create(&mod_desc, device);
 #endif
 

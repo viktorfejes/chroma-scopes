@@ -1,20 +1,9 @@
 #include "../vri.h"
 
+#include "d3d11_device.h"
+
 #include <assert.h>
 #include <d3d11_4.h>
-
-typedef struct {
-    vri_device_t base;
-
-    ID3D11Device5 *device;
-    ID3D11DeviceContext4 *immediate_context;
-    IDXGIAdapter *adapter;
-    D3D_FEATURE_LEVEL feature_level;
-} vri_d3d11_device_t;
-
-typedef struct {
-    vri_d3d11_device_t *parent_device;
-} vri_d3d11_context_t;
 
 static void fill_vtable_core(vri_core_interface_t *vtable);
 
@@ -23,9 +12,9 @@ bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
     vri_debug_callback_t dbg = desc->debug_callback;
 
     // Attempt to allocate the full internal struct
-    vri_d3d11_device_t *impl = desc->allocation_callback.allocate(sizeof(*impl), 8);
+    vri_d3d11_device_t *impl = desc->allocation_callback.allocate(sizeof(vri_d3d11_device_t), 8);
     if (!impl) {
-        dbg.message_callback(RHI_MESSAGE_SEVERITY_FATAL, "Allocation for device struct failed.");
+        dbg.message_callback(VRI_MESSAGE_SEVERITY_FATAL, "Allocation for device struct failed.");
         return false;
     }
 
@@ -37,7 +26,7 @@ bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
         IDXGIFactory4 *dxgi_factory = NULL;
         HRESULT hr = CreateDXGIFactory2(desc->enable_api_validation ? D3D11_CREATE_DEVICE_DEBUG : 0, IID_PPV_ARGS_C(IDXGIFactory4, &dxgi_factory));
         if (FAILED(hr)) {
-            dbg.message_callback(RHI_MESSAGE_SEVERITY_FATAL, "Failed to create DXGIFactory2 for adapter identification");
+            dbg.message_callback(VRI_MESSAGE_SEVERITY_FATAL, "Failed to create DXGIFactory2 for adapter identification");
             return false;
         }
 
@@ -48,7 +37,7 @@ bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
         };
         hr = dxgi_factory->lpVtbl->EnumAdapterByLuid(dxgi_factory, luid, IID_PPV_ARGS_C(IDXGIAdapter, &impl->adapter));
         if (FAILED(hr)) {
-            dbg.message_callback(RHI_MESSAGE_SEVERITY_FATAL, "Couldn't get IDXGIAdapter");
+            dbg.message_callback(VRI_MESSAGE_SEVERITY_FATAL, "Couldn't get IDXGIAdapter");
             return false;
         }
 
@@ -75,7 +64,7 @@ bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
         &base_context);
 
     if (FAILED(hr)) {
-        dbg.message_callback(RHI_MESSAGE_SEVERITY_FATAL, "Failed to create D3D11 device with any driver type");
+        dbg.message_callback(VRI_MESSAGE_SEVERITY_FATAL, "Failed to create D3D11 device with any driver type");
         desc->allocation_callback.free(impl, sizeof(*impl), 8);
         return false;
     }
@@ -84,7 +73,7 @@ bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
     ID3D11Device5 *device5 = NULL;
     hr = base_device->lpVtbl->QueryInterface(base_device, IID_PPV_ARGS_C(ID3D11Device5, &device5));
     if (FAILED(hr)) {
-        dbg.message_callback(RHI_MESSAGE_SEVERITY_FATAL, "Couldn't upgrade to ID3D11Device5. Feature not supported");
+        dbg.message_callback(VRI_MESSAGE_SEVERITY_FATAL, "Couldn't upgrade to ID3D11Device5. Feature not supported");
         desc->allocation_callback.free(impl, sizeof(*impl), 8);
         base_device->lpVtbl->Release(base_device);
         base_context->lpVtbl->Release(base_context);
@@ -95,7 +84,7 @@ bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
     ID3D11DeviceContext4 *context4 = NULL;
     hr = base_context->lpVtbl->QueryInterface(base_context, IID_PPV_ARGS_C(ID3D11DeviceContext4, &context4));
     if (FAILED(hr)) {
-        dbg.message_callback(RHI_MESSAGE_SEVERITY_FATAL, "Couldn't upgrade to ID3D11DeviceContext4. Feature not supported");
+        dbg.message_callback(VRI_MESSAGE_SEVERITY_FATAL, "Couldn't upgrade to ID3D11DeviceContext4. Feature not supported");
         desc->allocation_callback.free(impl, sizeof(*impl), 8);
         device5->lpVtbl->Release(device5);
         base_device->lpVtbl->Release(base_device);
@@ -120,10 +109,10 @@ bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
             // Set storage limit
             info_queue->lpVtbl->SetMessageCountLimit(info_queue, 1024);
 
-            dbg.message_callback(RHI_MESSAGE_SEVERITY_INFO, "D3D11 debug layer enabled for logging");
+            dbg.message_callback(VRI_MESSAGE_SEVERITY_INFO, "D3D11 debug layer enabled for logging");
             info_queue->lpVtbl->Release(info_queue);
         } else {
-            dbg.message_callback(RHI_MESSAGE_SEVERITY_ERROR, "Failed to enable D3D11 debug layer");
+            dbg.message_callback(VRI_MESSAGE_SEVERITY_ERROR, "Failed to enable D3D11 debug layer");
         }
     }
 
@@ -131,7 +120,6 @@ bool d3d11_device_create(const vri_device_desc_t *desc, vri_device_t **device) {
     impl->base.api = VRI_API_D3D11;
     impl->device = device5;
     impl->immediate_context = context4;
-    impl->feature_level = achieved_level;
 
     // Fill the core interface so device has a way of reaching it
     fill_vtable_core(&impl->base.core_interface);

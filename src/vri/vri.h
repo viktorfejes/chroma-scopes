@@ -45,10 +45,10 @@ typedef enum {
 } vri_queue_type_t;
 
 typedef enum {
-    RHI_MESSAGE_SEVERITY_INFO,
-    RHI_MESSAGE_SEVERITY_WARNING,
-    RHI_MESSAGE_SEVERITY_ERROR,
-    RHI_MESSAGE_SEVERITY_FATAL,
+    VRI_MESSAGE_SEVERITY_INFO,
+    VRI_MESSAGE_SEVERITY_WARNING,
+    VRI_MESSAGE_SEVERITY_ERROR,
+    VRI_MESSAGE_SEVERITY_FATAL,
 } vri_message_severity_t;
 
 typedef struct {
@@ -85,7 +85,7 @@ typedef struct {
 } vri_core_interface_t;
 
 typedef struct {
-    bool (*create_swapchain)(vri_device_t *device, const struct vri_swapchain_desc *desc, struct vri_swapchain **out_swapchain);
+    bool (*create_swapchain)(vri_device_t *device, const struct vri_swapchain_desc *swapchain_desc, struct vri_swapchain **out_swapchain);
     void (*destroy_swapchain)(struct vri_swapchain *swapchain);
 } vri_swapchain_interface_t;
 
@@ -111,9 +111,11 @@ struct vri_device_base {
     vri_core_interface_t core_interface;
 };
 
-bool vri_enumerate_adapters(vri_adapter_desc_t *adapter_descs, uint32_t *adapter_desc_count);
-bool vri_device_create(const vri_device_desc_t *desc, vri_device_t **device);
-void vri_device_destroy(vri_device_t *device);
+/* @brief Base type for queue/immediate mode context for D3D11 */
+typedef struct vri_queue {
+    /* @brief Pointer back to the parent device */
+    vri_device_t *parent_device;
+} vri_queue_t;
 
 // ==========================================================
 // SWAPCHAIN
@@ -122,6 +124,11 @@ typedef enum {
     VRI_SWAPCHAIN_FORMAT_REC709_8BIT_SRGB,
     VRI_SWAPCHAIN_FORMAT_REC709_16BIT_LINEAR,
 } vri_swapchain_format_t;
+
+typedef enum {
+    VRI_SWAPCHAIN_FLAG_BIT_NONE = 0,
+    VRI_SWAPCHAIN_FLAG_BIT_VSYNC = 1 << 0,
+} vri_swapchain_flag_bit_t;
 
 typedef struct vri_window_win32 {
     void *hwnd;
@@ -153,15 +160,16 @@ typedef struct vri_swapchain_desc {
     uint32_t width;
     uint32_t height;
     vri_swapchain_format_t format;
-    uint8_t flags;
+    uint32_t flags;
+    uint8_t texture_count;
     uint8_t frames_in_flight;
 } vri_swapchain_desc_t;
 
+/* @brief Base type for swapchain */
 typedef struct vri_swapchain {
-    void *internal;
+    vri_device_t *parent_device;
 } vri_swapchain_t;
 
-typedef struct vri_queue vri_queue_t;                   // Immediate (in d3d11)
 typedef struct vri_command_buffer vri_command_buffer_t; // Deferred (in d3d11)
 
 typedef struct vri_buffer vri_buffer_t;
@@ -172,3 +180,7 @@ typedef struct vri_pipeline vri_pipeline_t;
 
 typedef struct vri_command_pool vri_command_pool_t;
 typedef struct vri_fence vri_fence_t;
+
+bool vri_enumerate_adapters(vri_adapter_desc_t *adapter_descs, uint32_t *adapter_desc_count);
+bool vri_device_create(const vri_device_desc_t *device_desc, vri_device_t **device);
+void vri_device_destroy(vri_device_t *device);
